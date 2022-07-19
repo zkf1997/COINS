@@ -1,6 +1,6 @@
 # Compositional Human-Scene Interaction Synthesis with Semantic Control (COINS)
 This repository contains the implementation of our paper Compositional Human-Scene Interaction Synthesis with Semantic Control and the PROX-S dataset expansion.
-![](images/teaser.png)
+![teaser](./images/teaser.png)
 
 ## Installation
 This implementation is tested on the following platform:
@@ -22,7 +22,7 @@ External data files:
 os.environ['PYOPENGL_PLATFORM'] = 'osmesa' 
 ```
 ## PROX-S dataset
-![](images/PROX-S.png)
+![PROX-S](./images/PROX-S.png)
 The PROX-S dataset is a human-scene interaction dataset annotated on top of [PROX](https://prox.is.tue.mpg.de/index.html) and [PROX-E](https://github.com/yz-cnsdqz/PSI-release), which contains:
 * scene with instance segmentation
 * per-frame interaction semantic labels and SMPL-X body estimation
