@@ -9,11 +9,12 @@ import pylab
 from tqdm import tqdm
 
 from transform_trainer import *
-from interaction_trainer import LitInteraction, calc_contact_loss
+from interaction_trainer import LitInteraction
 from pointnet2 import farthest_point_sample
 from viz_util import *
 from sample_pelvis import to_pointcloud, composition_sample
 from sample_interaction import get_composition_mask
+from chamfer_distance import chamfer_dists
 
 def rotation_matrix_vector_multiply(rot_mat, rot_vec):
     rotation = torch.matmul(rot_mat, pytorch3d.transforms.axis_angle_to_matrix(rot_vec))

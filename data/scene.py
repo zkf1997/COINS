@@ -133,39 +133,36 @@ class ObjectNode:
         return cls(load=True, **serialized)
 
 class Scene:
-    def __init__(self, scene_name):
-        # load from serialization
-        scene_cache_path = os.path.join(scene_cache_folder, scene_name + '.pkl')
-        assert os.path.exists(scene_cache_path)
-        with open(scene_cache_path, 'rb') as f:
-            try:
-                serialized = pickle.load(f)
-                vertex_colors = o3d.utility.Vector3dVector(serialized['mesh']['vertex_colors'])
-                vertex_normals = o3d.utility.Vector3dVector(serialized['mesh']['vertex_normals'])
-                serialized['mesh'] = o3d.geometry.TriangleMesh(
-                    vertices=o3d.utility.Vector3dVector(serialized['mesh']['vertices']),
-                    triangles=o3d.utility.Vector3iVector(serialized['mesh']['triangles'])
-                )
-                serialized['mesh'].vertex_colors = vertex_colors
-                serialized['mesh'].compute_vertex_normals()
-                serialized['mesh'].vertex_normals = vertex_normals
+    def __init__(self, scene_name, rebuild=False):
+        self.object_nodes = []
+        self.name = scene_name
+        # cam to world transform
+        cam2world_path = os.path.join(cam2world_folder, scene_name + ".json")
+        with open(cam2world_path, 'r') as f:
+            self.cam2world = np.array(json.load(f))
+        # scene mesh and semantic mesh
+        scene_path = os.path.join(scene_folder, scene_name + '.ply')
+        # semantic annotation of Werkraum is inconsistent with RGB scan
+        scene_semantic_path = os.path.join(scene_folder, scene_name + '_withlabels.ply') if scene_name in ['Werkraum',
+                                                                                                           'MPH1Library'] else os.path.join(
+            scene_folder, scene_name + '_semantic.ply')
+        # load with trimesh errors for werkraum
+        self.mesh = o3d.io.read_triangle_mesh(scene_path)
+        original_mesh = to_trimesh(self.mesh)
+        semantic_mesh = to_trimesh(o3d.io.read_triangle_mesh(scene_semantic_path))
+        segment_mesh = semantic_mesh if scene_name in ['Werkraum',
+                                                       'MPH1Library'] else original_mesh  # semantic annotation of the two is inconsistent with RGB scan, we can only split the semantic mesh
+        # print(original_mesh.vertices.shape, semantic_mesh.vertices.shape)
+        # self.mesh = original_mesh
 
-                serialized['object_nodes'] = [ObjectNode.deserialize(obj_node) for obj_node in
-                                              serialized['object_nodes']]
-                self.__dict__.update(**serialized)
-            except Exception as e:
-                print(e, "load failed")
-
-        # build kdtree
-        # points = np.zeros((0, 3))
-        # self.vertex_number_list = [] # vertex number of each object, used to query which object a point belong to
-        # for obj_node in self.object_nodes:
-        #     self.vertex_number_list.append(np.asarray(obj_node.mesh.vertices).shape[0])
-        #     points = np.concatenate((points, np.asarray(obj_node.mesh.vertices)), axis=0)
-        # self.vertex_number_list = np.asarray(self.vertex_number_list)
-        # self.vertex_number_sum = np.cumsum(self.vertex_number_list)
-        # self.pointcloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
-        # self.kdtree = o3d.geometry.KDTreeFlann(self.pointcloud) # kdtree of all object instances
+        # load or build instance segmentation
+        instance_segment_path = os.path.join(scene_folder, self.name + '_segment.json')
+        with open(instance_segment_path, 'r') as f:
+            segment_labels = json.load(f)
+        vertex_category_ids, vertex_instance_ids = np.array(segment_labels['vertex_category']), np.array(
+            segment_labels['vertex_instance'])
+        self.get_object_nodes(vertex_category_ids, vertex_instance_ids, segment_mesh)
+        self.mesh_with_accessory = {}
 
         # load sdf
         # https: // github.com / mohamedhassanmus / POSA / blob / de21b40f22316cfb02ec43021dc5f325547c41ca / src / data_utils.py  # L99
@@ -178,60 +175,28 @@ class Scene:
         sdf = np.load(os.path.join(sdf_folder, self.name + '_sdf.npy')).astype(np.float32)
         sdf = sdf.reshape((grid_dim, grid_dim, grid_dim, 1))
         self.sdf = sdf
-        # self.sdf_torch = torch.from_numpy(sdf.reshape((1, grid_dim, grid_dim, grid_dim))).to(
-        #     torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
         self.sdf_config = {'grid_min': grid_min, 'grid_max': grid_max, 'grid_dim': grid_dim}
-        self.mesh_with_accessory = {}
 
-    # def vertex_id_to_obj_id(self, vertex_id):
-    #     return np.searchsorted(self.vertex_number_sum, vertex_id)
-
-    # def serialize(self):
-    #     serialized = copy.deepcopy(self.__dict__)
-    #     serialized['mesh'] = {'vertices': np.asarray(self.mesh.vertices),
-    #                           'triangles': np.asarray(self.mesh.triangles),
-    #                           'vertex_colors': np.asarray(self.mesh.vertex_colors),
-    #                           'vertex_normals': np.asarray(self.mesh.vertex_normals)}
-    #     serialized['object_nodes'] = [obj_node.serialize() for obj_node in serialized['object_nodes']]
-    #     # del serialized['kdtree']
-    #     return serialized
-    #
-    # @classmethod
-    # def deserialize(cls, serialized):
-    #     # print(serialized['mesh']['vertices'].shape)
-    #     vertex_colors = o3d.utility.Vector3dVector(serialized['mesh']['vertex_colors'])
-    #     vertex_normals = o3d.utility.Vector3dVector(serialized['mesh']['vertex_normals'])
-    #     serialized['mesh'] = o3d.geometry.TriangleMesh(
-    #         vertices=o3d.utility.Vector3dVector(serialized['mesh']['vertices']),
-    #         triangles=o3d.utility.Vector3iVector(serialized['mesh']['triangles'])
-    #     )
-    #     serialized['mesh'].vertex_colors = vertex_colors
-    #     serialized['mesh'].compute_vertex_normals()
-    #     serialized['mesh'].vertex_normals = vertex_normals
-    #
-    #     serialized['object_nodes'] = [ObjectNode.deserialize(obj_node) for obj_node in serialized['object_nodes']]
-    #     # points = np.zeros((0, 3))
-    #     # for obj_node in serialized['object_nodes']:
-    #     #     points = np.concatenate((points, np.asarray(obj_node.mesh.vertices)), axis=0)
-    #     # serialized['kdtree'] = o3d.geometry.KDTreeFlann(points)
-    #     return cls(load=True, **serialized)
-    #
-    # @classmethod
-    # # create from cache if available or compute using scene scan
-    # def create(cls, scene_name, overwrite=False):
-    #     # check if there are precomputed scene nodes
-    #     scene_cache_path = os.path.join(scene_cache_folder, scene_name + '.pkl')
-    #     if os.path.exists(scene_cache_path) and not overwrite:
-    #         with open(scene_cache_path, 'rb') as f:
-    #             try:
-    #                 pkl = pickle.load(f)
-    #                 print("create with cache for:", scene_name)
-    #                 return cls.deserialize(pkl)
-    #             except Exception as e:
-    #                 print(e, "load failed, try to build scene nodes from scene scan")
-    #                 return cls(scene_name=scene_name)
-    #     print("build scene nodes from scan for scene:", scene_name)
-    #     return cls(scene_name=scene_name)
+    def get_object_nodes(self, vertex_category_ids, vertex_instance_ids, segment_mesh):
+        # build object nodes
+        self.object_nodes = []
+        for instance_id in np.unique(vertex_instance_ids):
+            if instance_id == 0:
+                continue
+            vertex_ids = np.nonzero(vertex_instance_ids == instance_id)[0]
+            category_id = vertex_category_ids[vertex_ids[0]]
+            vis_color = np.array(category_dict.loc[category_id]['color']) / 255
+            face_ids = np.nonzero((vertex_instance_ids[segment_mesh.faces] == instance_id).sum(axis=1) == 3)[0]
+            instance_mesh = segment_mesh.submesh([face_ids], append=True)
+            instance_mesh = to_open3d(instance_mesh)
+            if self.name in ['Werkraum', 'MPH1Library']:  # use vis color for these two
+                instance_mesh.paint_uniform_color(vis_color)
+            aabb = instance_mesh.get_axis_aligned_bounding_box()
+            aabb.color = vis_color
+            self.object_nodes.append(ObjectNode(mesh=instance_mesh, aabb=aabb, scene=self.name, vis_color=vis_color,
+                                                pointcloud=o3d.geometry.PointCloud(instance_mesh.vertices),
+                                                category=category_id, category_name=category_dict.loc[category_id]['mpcat40'],
+                                                id=instance_id - 1))  # id -1 to make instance index start from 0, this makes object nodes array indexing more simple
 
     def get_visualize_geometries(self, semantic=False):
         # if not semantic:

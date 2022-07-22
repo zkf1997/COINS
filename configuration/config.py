@@ -5,7 +5,7 @@ import numpy as np
 from PIL import ImageColor
 
 proxe_base_folder = Path("/home/kaizhao/projects/COINS/proxe")
-# scene_folder = Path.joinpath(proxe_base_folder, "scenes_semantics")
+scene_folder = Path.joinpath(proxe_base_folder, "scenes_semantics")
 sdf_folder = Path.joinpath(proxe_base_folder, "sdf")
 cam2world_folder = Path.joinpath(proxe_base_folder, "cam2world")
 # human_folder = Path.joinpath(proxe_base_folder, "PROX_temporal/PROXD_temp_v2")

@@ -29,7 +29,7 @@ The PROX-S dataset is a human-scene interaction dataset annotated on top of [PRO
 * per-frame interaction semantic labels and SMPL-X body estimation
 
 You can download PROX-S expansion [here](https://drive.google.com/drive/folders/1nV_S_m0Yl8p3sOaCLpz5IIZxoL4_TAtE?usp=sharing).
-Please also download `scenes`, `sdf`, and `body_segments` from [PROX](https://prox.is.tue.mpg.de/index.html), `scenes_semantics` from [PROX-E](https://github.com/yz-cnsdqz/PSI-release), and set the paths in [config](configuration/config.py). 
+Please also download `scenes`, `cam2world`, `sdf`, and `body_segments` from [PROX](https://prox.is.tue.mpg.de/index.html), `scenes_semantics` from [PROX-E](https://github.com/yz-cnsdqz/PSI-release), and set the paths in [config](configuration/config.py). 
 
 You can render scene segmentation and log object instances by:
 ```

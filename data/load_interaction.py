@@ -15,28 +15,6 @@ from data.scene import scenes, to_trimesh
 from configuration.config import *
 import time
 
-# https://www.dropbox.com/scl/fi/zkatuv5shs8d4tlwr8ecc/Change-parameters-to-new-coordinate-system.paper?dl=0&rlkey=lotq1sh6wzkmyttisc05h0in0
-# def smplx_camera_to_scene(seq_data, cam_to_scene):
-#     T = len(seq_data['transl'])
-#     body_model = smplx.create(model_path=smplx_model_folder, model_type='smplx',
-#                               gender=seq_data['gender'], ext='npz',
-#                               num_pca_comps=12)
-#     body_model.reset_params(betas=torch.tensor(seq_data['betas']).repeat(1, 1))
-#     pelvis = body_model().joints.detach().cpu().numpy().squeeze()[0, :].reshape((1, 3))
-#     R_cam_to_scene = Rotation.from_matrix(cam_to_scene[:3, :3])
-#     t_cam_to_scene = cam_to_scene[:3, 3]
-#
-#     for idx in range(T):
-#         R_camera = Rotation.from_rotvec(seq_data['global_orient'][idx])
-#         t_camera = seq_data['transl'][idx]
-#         R_scene = R_cam_to_scene * R_camera
-#         t_scene = R_cam_to_scene.apply(pelvis + t_camera) + t_cam_to_scene - pelvis
-#         seq_data['transl'][idx] = t_scene
-#         seq_data['global_orient'][idx] = R_scene.as_rotvec()
-#
-#     return seq_data
-
-
 body_model = smplx.create(smplx_model_folder, model_type='smplx',
                               gender='neutral', ext='npz',
                               num_pca_comps=12,
@@ -152,9 +130,9 @@ if __name__ == "__main__":
     with open(Path.joinpath(project_folder, "data", 'test.pkl'), 'rb') as data_file:
         test_data = pickle.load(data_file)
     # load interactions containing specified interactions and visualize
-    data = get_interaction_segments(['sit on-sofa', 'touch-table'], train_data, mode='verb-noun')
-    print(len(data))
-    visualize(data, full_scene=False, skip_frame=1, start_frame=0)
+    # data = get_interaction_segments(['sit on-sofa', 'touch-table'], train_data, mode='verb-noun')
+    # print(len(data))
+    # visualize(data, full_scene=False, skip_frame=1, start_frame=0)
     data = get_interaction_segments(['lie on'], train_data, mode='verb')
     print(len(data))
     visualize(data, full_scene=False, skip_frame=1)
