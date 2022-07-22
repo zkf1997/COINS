@@ -24,11 +24,11 @@ os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
 ## PROX-S dataset
 ![PROX-S](./images/PROX-S.png)
 The PROX-S dataset is a human-scene interaction dataset annotated on top of [PROX](https://prox.is.tue.mpg.de/index.html) and [PROX-E](https://github.com/yz-cnsdqz/PSI-release), which contains:
-* scene with instance segmentation
+* scene instance segmentation
 * per-frame interaction semantic labels and SMPL-X body estimation
 
 You can download PROX-S expansion [here](https://drive.google.com/drive/folders/1nV_S_m0Yl8p3sOaCLpz5IIZxoL4_TAtE?usp=sharing).
-Please also download `sdf` and `body_segments` from [PROX](https://prox.is.tue.mpg.de/index.html) and set the paths in [config](configuration/config.py). 
+Please also download `scenes`, `sdf`, and `body_segments` from [PROX](https://prox.is.tue.mpg.de/index.html), `scenes_semantics` from [PROX-E](https://github.com/yz-cnsdqz/PSI-release), and set the paths in [config](configuration/config.py). 
 
 You can render scene segmentation and log object instances by:
 ```
@@ -75,5 +75,9 @@ We employ MIT license for this repository, with the exceptions of codes borrowed
 * [chamfer_distance.py](interaction/chamfer_distance.py) from [Pytorch3D](https://pytorch3d.org/). 
 * [loss.py](interaction/loss.py) from [Pose2Mesh](https://github.com/hongsukchoi/Pose2Mesh_RELEASE/blob/master/lib/core/loss.py).
 * [mesh.py](interaction/mesh.py), [posa_utils](interaction/posa_utils.py), [viz_utils](interaction/viz_util.py) from [POSA](https://posa.is.tue.mpg.de/index.html).
+* [eulerangles.py](interaction/eulerangles.py) from [transforms3d](https://github.com/matthew-brett/transforms3d/blob/master/transforms3d/euler.py).
+* [pointnet2.py](interaction/pointnet2.py) from [pointnet_pointnet2](https://github.com/yanx27/Pointnet_Pointnet2_pytorch/blob/master/models/pointnet2_utils.py).
+* [smplx_regressor.py](interaction/smplx_regressor.py) from [GraphCMR](https://github.com/nkolot/GraphCMR).
+* [transformer.py](interaction/transformer.py) from [pytorch](https://pytorch.org/docs/stable/_modules/torch/nn/modules/transformer.html#Transformer). 
 
 We sincerely thank the authors for releasing the codes and please check their respective licenses for these parts.

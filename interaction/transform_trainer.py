@@ -34,7 +34,7 @@ from data.scene import scenes, to_trimesh
 from data.utils import *
 from interaction.smplx_regressor import SMPLX_Regressor
 from interaction.loss import *
-from interaction.transform_net import *
+# from interaction.transform_net import *
 from interaction.interaction_model import InteractionVAE
 # from interaction.interaction_loss import *
 from interaction.utils import *
@@ -101,10 +101,6 @@ class LitTransformNet(pl.LightningModule):
         #          gender='neutral', ext='npz',
         #          num_pca_comps=num_pca_comps, batch_size=1)
 
-        if args.model == 'TransformVAE':
-            self.model = TransformVAE(args)
-        if args.model == 'CompositeTransformVAE':
-            self.model = CompositeTransformVAE(args)
         if args.model == 'InteractionVAE':
             self.model = InteractionVAE(args)
         else:
