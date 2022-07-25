@@ -1,6 +1,6 @@
 # Compositional Human-Scene Interaction Synthesis with Semantic Control (COINS)
 This repository contains the implementation of our paper Compositional Human-Scene Interaction Synthesis with Semantic Control and the PROX-S dataset expansion.
-![teaser](./images/teaser.png)
+![teaser](./images/COINS_teaser.svg)
 
 You can find more information on our [project page](https://zkf1997.github.io/COINS/index.html).
 ## Installation
