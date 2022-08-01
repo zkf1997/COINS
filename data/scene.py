@@ -40,8 +40,6 @@ def to_open3d(trimesh_mesh):
         o3d_mesh.vertex_colors = o3d.utility.Vector3dVector(trimesh_mesh.visual.vertex_colors[:, :3] / 255.0)
     o3d_mesh.compute_vertex_normals()  # if not compute but only assign trimesh normals, the normal rendering fails, not sure about the reason
     o3d_mesh.vertex_normals = o3d.utility.Vector3dVector(trimesh_mesh.vertex_normals)
-    # input_normals = trimesh_mesh.vertex_normals
-    # print('normal_diff:', input_normals - np.asarray(o3d_mesh.vertex_normals))
     return o3d_mesh
 
 def select_face_by_vertices(faces, vertices):
@@ -91,6 +89,7 @@ class ObjectNode:
         vis_mesh.paint_uniform_color(self.vis_color)
         vis_mesh.vertex_normals = self.mesh.vertex_normals
         self.vis_mesh = vis_mesh
+        self.aabb.color = self.vis_color
 
     def calc_features(self):
         centroid = np.asarray(self.pointcloud.points).mean(axis=0)
@@ -134,34 +133,56 @@ class ObjectNode:
 
 class Scene:
     def __init__(self, scene_name, rebuild=False):
-        self.object_nodes = []
-        self.name = scene_name
-        # cam to world transform
-        cam2world_path = os.path.join(cam2world_folder, scene_name + ".json")
-        with open(cam2world_path, 'r') as f:
-            self.cam2world = np.array(json.load(f))
-        # scene mesh and semantic mesh
-        scene_path = os.path.join(scene_folder, scene_name + '.ply')
-        # semantic annotation of Werkraum is inconsistent with RGB scan
-        scene_semantic_path = os.path.join(scene_folder, scene_name + '_withlabels.ply') if scene_name in ['Werkraum',
-                                                                                                           'MPH1Library'] else os.path.join(
-            scene_folder, scene_name + '_semantic.ply')
-        # load with trimesh errors for werkraum
-        self.mesh = o3d.io.read_triangle_mesh(scene_path)
-        original_mesh = to_trimesh(self.mesh)
-        semantic_mesh = to_trimesh(o3d.io.read_triangle_mesh(scene_semantic_path))
-        segment_mesh = semantic_mesh if scene_name in ['Werkraum',
-                                                       'MPH1Library'] else original_mesh  # semantic annotation of the two is inconsistent with RGB scan, we can only split the semantic mesh
-        # print(original_mesh.vertices.shape, semantic_mesh.vertices.shape)
-        # self.mesh = original_mesh
+        scene_cache_path = os.path.join(scene_cache_folder, scene_name + '.pkl')
+        # load from scene cache file if exist for acceleration
+        if os.path.exists(scene_cache_path):
+            print('loading from cache for:', scene_name)
+            with open(scene_cache_path, 'rb') as f:
+                serialized = pickle.load(f)
+            vertex_colors = o3d.utility.Vector3dVector(serialized['mesh']['vertex_colors'])
+            vertex_normals = o3d.utility.Vector3dVector(serialized['mesh']['vertex_normals'])
+            serialized['mesh'] = o3d.geometry.TriangleMesh(
+                vertices=o3d.utility.Vector3dVector(serialized['mesh']['vertices']),
+                triangles=o3d.utility.Vector3iVector(serialized['mesh']['triangles'])
+            )
+            serialized['mesh'].vertex_colors = vertex_colors
+            serialized['mesh'].compute_vertex_normals()
+            serialized['mesh'].vertex_normals = vertex_normals
+            serialized['object_nodes'] = [ObjectNode.deserialize(obj_node) for obj_node in serialized['object_nodes']]
+            self.__dict__.update(serialized)
+        else:
+            print('create scene:', scene_name)
+            self.object_nodes = []
+            self.name = scene_name
+            # cam to world transform
+            cam2world_path = os.path.join(cam2world_folder, scene_name + ".json")
+            with open(cam2world_path, 'r') as f:
+                self.cam2world = np.array(json.load(f))
+            # scene mesh and semantic mesh
+            scene_path = os.path.join(scene_folder, scene_name + '.ply')
+            # semantic annotation of Werkraum is inconsistent with RGB scan
+            scene_semantic_path = os.path.join(scene_folder, scene_name + '_withlabels.ply') if scene_name in ['Werkraum',
+                                                                                                               'MPH1Library'] else os.path.join(
+                scene_folder, scene_name + '_semantic.ply')
+            # load with trimesh errors for werkraum
+            self.mesh = o3d.io.read_triangle_mesh(scene_path)
+            original_mesh = to_trimesh(self.mesh)
+            semantic_mesh = to_trimesh(o3d.io.read_triangle_mesh(scene_semantic_path))
+            segment_mesh = semantic_mesh if scene_name in ['Werkraum',
+                                                           'MPH1Library'] else original_mesh  # semantic annotation of the two is inconsistent with RGB scan, we can only split the semantic mesh
 
-        # load or build instance segmentation
-        instance_segment_path = os.path.join(scene_folder, self.name + '_segment.json')
-        with open(instance_segment_path, 'r') as f:
-            segment_labels = json.load(f)
-        vertex_category_ids, vertex_instance_ids = np.array(segment_labels['vertex_category']), np.array(
-            segment_labels['vertex_instance'])
-        self.get_object_nodes(vertex_category_ids, vertex_instance_ids, segment_mesh)
+            # load or build instance segmentation
+            instance_segment_path = os.path.join(scene_folder, self.name + '_segment.json')
+            with open(instance_segment_path, 'r') as f:
+                segment_labels = json.load(f)
+            vertex_category_ids, vertex_instance_ids = np.array(segment_labels['vertex_category']), np.array(
+                segment_labels['vertex_instance'])
+            self.get_object_nodes(vertex_category_ids, vertex_instance_ids, segment_mesh)
+
+            # save scene cache
+            with open(scene_cache_path, 'wb') as f:
+                pickle.dump(self.serialize(), f)
+
         self.mesh_with_accessory = {}
 
         # load sdf
@@ -176,6 +197,16 @@ class Scene:
         sdf = sdf.reshape((grid_dim, grid_dim, grid_dim, 1))
         self.sdf = sdf
         self.sdf_config = {'grid_min': grid_min, 'grid_max': grid_max, 'grid_dim': grid_dim}
+
+    def serialize(self):
+        serialized = copy.deepcopy(self.__dict__)
+        serialized['mesh'] = {'vertices': np.asarray(self.mesh.vertices),
+                              'triangles': np.asarray(self.mesh.triangles),
+                              'vertex_colors': np.asarray(self.mesh.vertex_colors),
+                              'vertex_normals': np.asarray(self.mesh.vertex_normals)}
+        serialized['object_nodes'] = [obj_node.serialize() for obj_node in serialized['object_nodes']]
+        # del serialized['kdtree']
+        return serialized
 
     def get_object_nodes(self, vertex_category_ids, vertex_instance_ids, segment_mesh):
         # build object nodes
@@ -210,8 +241,6 @@ class Scene:
             geometries.append(self.mesh)
         else:
             for object_node in self.object_nodes:
-                # if object_node.category_name != 'table':
-                #     continue
                 geometries.append(object_node.vis_mesh if semantic else object_node.mesh)
                 geometries.append(object_node.aabb)
         return geometries
