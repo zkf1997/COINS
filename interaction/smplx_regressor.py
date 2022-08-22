@@ -62,6 +62,7 @@ class ContinousRotReprDecoder(nn.Module):
 
 
 class SMPLX_Regressor(nn.Module):
+    """Regress SMPLX body params from mesh vertices"""
     def __init__(self, mesh, args):
         super(SMPLX_Regressor, self).__init__()
 
@@ -98,6 +99,7 @@ class SMPLX_Regressor(nn.Module):
 
 
 class SMPLX_Regressor_Joint(nn.Module):
+    """Regress SMPLX body params from joints locations"""
     def __init__(self, num_joints=55):
         super(SMPLX_Regressor_Joint, self).__init__()
 
@@ -132,6 +134,7 @@ class SMPLX_Regressor_Joint(nn.Module):
         return result
 
 class SMPLX_Regressor_Joint_Orient(nn.Module):
+    """Regress SMPLX body params from joint locations and orientations"""
     def __init__(self, num_joints=55, num_dim=9):
         super(SMPLX_Regressor_Joint_Orient, self).__init__()
 

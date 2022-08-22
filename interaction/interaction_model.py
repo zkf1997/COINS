@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from pointnet2_ops.pointnet2_modules import PointnetSAModuleMSG
 from configuration.config import *
 
+# https://github.com/Mathux/ACTOR/blob/d3b0afe674e01fa2b65c89784816c3435df0a9a5/src/models/architectures/transformer.py#L7
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -59,7 +60,6 @@ class Embedder:
     def embed(self, inputs):
         return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
 
-
 def get_embedder(multires, i=0, input_dimension=3):
     if i == -1:
         return nn.Identity(), 3
@@ -78,6 +78,9 @@ def get_embedder(multires, i=0, input_dimension=3):
     return embed, embedder_obj.out_dim
 
 class NormalDistDecoder(nn.Module):
+    """
+    Linear layers to map input feature to latent normal distribution
+    """
     def __init__(self, num_feat_in, latentD):
         super(NormalDistDecoder, self).__init__()
         self.num_feat_in = num_feat_in
@@ -91,28 +94,12 @@ class NormalDistDecoder(nn.Module):
         return torch.distributions.normal.Normal(self.mu(Xout), torch.exp(0.5 * self.logvar(Xout)))
 
 def padded_idx_to_code(verb_ids):
+    """
+    Get one-hot codes from verb indices
+    """
     codebook = torch.cat([torch.eye(num_verb, dtype=torch.float32, device=verb_ids.device),
                torch.zeros((1, num_verb), dtype=torch.float32, device=verb_ids.device)], dim=0)
     return codebook[verb_ids.long()]
-
-# class Pointnet2Encoder(nn.Module):
-#     def __init__(self, out_dimension, freeze=False):
-#         super(Pointnet2Encoder, self).__init__()
-#         self.out_dimension = out_dimension
-#         self.out_points = 16
-#         self.pointnet2 = nn.Sequential(
-#             LocalPointEncoder(freeze=freeze),
-#         )
-#         self.linear = nn.Linear(512 + 3, out_dimension)
-#
-#     def forward(self, obj_points):
-#         B, I, P, C = obj_points.shape
-#         xyz, points = self.pointnet2(
-#             obj_points.permute((0, 1, 3, 2)).reshape(B * I, C, P),
-#         )
-#         obj_embedding = self.linear(torch.cat([xyz, points], dim=1).transpose(1, 2)).reshape(B, I, self.out_points,
-#                                                                                              self.out_dimension)
-#         return obj_embedding
 
 # https://github.com/erikwijmans/Pointnet2_PyTorch/blob/master/pointnet2/models/pointnet2_msg_sem.py
 class PointNet2Encoder(nn.Module):
@@ -182,6 +169,9 @@ class PointNet2Encoder(nn.Module):
         return local_keypoints.reshape(B, I, self.num_keypoints, self.c_out)
 
 class BodyEmbedding(nn.Module):
+    """
+    Get embedding for body tokens
+    """
     def __init__(self, input_dimension, output_dimension,
                  use_nerf_embed, multires=10):
         super(BodyEmbedding, self).__init__()
@@ -198,6 +188,9 @@ class BodyEmbedding(nn.Module):
         return body_points
 
 class InteractionVAE(nn.Module):
+    """
+    Conditional VAE network for both PelvisVAE and BodyVAE.
+    """
     def __init__(self, args):
         super(InteractionVAE, self).__init__()
         self.args = args
@@ -208,7 +201,6 @@ class InteractionVAE(nn.Module):
 
         self.bodyEmbedding = BodyEmbedding(input_dimension=args.dim_body_points, output_dimension=num_channels,
                                            use_nerf_embed=args.nerf_embed, multires=args.multires, )
-        # self.objEmbedding = Pointnet2Encoder(freeze=args.freeze, out_dimension=num_channels)
         self.objEmbedding = PointNet2Encoder(c_in=6, c_out=num_channels, num_keypoints=args.num_obj_keypoints) if args.use_pointnet2 else nn.Linear(9, num_channels)
         self.interactionEmbedding = nn.Parameter(torch.randn(num_verb, num_channels))
         self.positionalEmbedding = PositionalEncoding(d_model=num_channels, dropout=args.dropout)
@@ -227,6 +219,7 @@ class InteractionVAE(nn.Module):
         self.interactionBias = nn.Parameter(torch.randn(num_verb, args.latent_dim))
         self.latentEmbedding = nn.Linear(args.latent_dim, num_channels)
 
+        # choose to use the latent code as memory or add it to template body tokens
         if self.args.latent_usage == 'memory':
             seqTransDecoderLayer = TransformerDecoderLayer(d_model=num_channels,
                                                               nhead=self.args.num_heads,
@@ -247,16 +240,23 @@ class InteractionVAE(nn.Module):
         self.finalLinear = nn.Linear(num_channels, args.dim_body_points)
 
     def _get_embeddings(self, x=None, batch=None):
+        """
+        Get embeddings for tokens of input body, input action-object pairs, and template body.
+
+        Return:
+            verb_codes: one-hot codes for verbs
+            padding_mask: padding mask for tokens,
+            body_embedding: embeddings of input body tokens
+            obj_embedding: embeddings of object tokens
+            template_embedding: embeddings of template body tokens
+        """
         num_atomics, obj_points, verb_ids = batch['num_atomics'], batch['object_pointclouds'], batch['verb_ids']
         B, I, _, _ = obj_points.shape
         Po, Pb, D = self.args.num_obj_keypoints, self.args.num_body_points, self.args.embedding_dim
         padding_mask = (verb_ids == -1).repeat_interleave(Po).reshape((B, Po * 2))  # BxPo*2
         padding_mask = torch.cat([torch.zeros((B, Pb), dtype=torch.bool, device=obj_points.device),
                                   padding_mask], dim=1)
-        # print(verb_ids)
         verb_codes = padded_idx_to_code(verb_ids)  # Bx2xVerb
-        # print(padding_mask)
-        # print(verb_codes)
         verb_embedding = torch.matmul(verb_codes, self.interactionEmbedding)  # Bx2xD
         interaction_embedding = (verb_embedding.sum(dim=1) / num_atomics.unsqueeze(1)).unsqueeze(1)
 
@@ -292,17 +292,24 @@ class InteractionVAE(nn.Module):
         return verb_codes, padding_mask, body_embedding, obj_embedding, template_embedding
 
     def _encode(self, body_embedding, obj_embedding, padding_mask, Pb):
+        """
+        Encode the input embeddings to latent distribtuion.
+        """
         encoder_input = torch.cat([body_embedding, obj_embedding], dim=1)  # BxPb+2PoxD
         feature = self.encoder(encoder_input, src_key_padding_mask=padding_mask)[0][:, :Pb, :].mean(dim=1)
         z_dist = self.latentNormal(feature)  # BxD
         return z_dist
 
     def _decode(self, verb_codes, padding_mask, obj_embedding, template_embedding, z_sample, Pb, num_atomics, attention_mask=None):
+        """
+        Decode latent code to body/pelvis prediction.
+        """
         if self.args.interaction_bias:
             interaction_bias = torch.matmul(verb_codes, self.interactionBias).sum(dim=1) / num_atomics.unsqueeze(1)
             z_sample = z_sample + interaction_bias
         z_sample = self.latentEmbedding(z_sample).unsqueeze(1)  # Bx1xD
 
+        # choose to use the latent code as memory or add it to template body tokens
         if self.args.latent_usage == 'memory':
             decoder_input = torch.cat([template_embedding, obj_embedding], dim=1)  # BxPb+2*PoxD
             decoder_output = self.decoder(tgt=decoder_input, memory=z_sample, tgt_key_padding_mask=padding_mask, tgt_mask=attention_mask)
@@ -329,6 +336,9 @@ class InteractionVAE(nn.Module):
         return pred, z_dist
 
     def sample(self, batch, composition_mask=False):
+        """
+        Sample body/pelvis.
+        """
         set_eval = self.training
         if set_eval:
             self.eval()
@@ -351,6 +361,9 @@ class InteractionVAE(nn.Module):
         return pred, attention
 
     def decode(self, batch, z_sample, composition_mask=False):
+        """
+        Sample body/pelvis using inputted latent codes.
+        """
         self.eval()
 
         num_atomics, obj_points, verb_ids = batch['num_atomics'], batch['object_pointclouds'], batch['verb_ids']
@@ -367,6 +380,9 @@ class InteractionVAE(nn.Module):
         return pred, attention
 
     def get_composition_mask(self, composition_mask='diagonal'):
+        """
+        Get body composition masks.
+        """
         if composition_mask == 'manual':
             if hasattr(self, 'manual_mask'):
                 return self.manual_mask
@@ -378,13 +394,6 @@ class InteractionVAE(nn.Module):
             elif self.args.body_type == 'mesh':
                 upper_body, lower_body = self.args.body_segment
 
-            # suppose touch is the second atomic interaction
-            # composition_mask[:Pb, :Pb] = False
-            # composition_mask[Pb:Pb + Po, :Pb + Po] = False
-            # composition_mask[Pb + Po:, :Pb] = False
-            # composition_mask[Pb + Po:, Pb + Po:] = False
-            # composition_mask[lower_body, Pb:Pb + Po] = False
-            # composition_mask[upper_body, Pb + Po:] = False
             composition_mask[upper_body, Pb:Pb+Po] = True
             # composition_mask[Pb:Pb + Po, upper_body] = True
             composition_mask[lower_body, Pb+Po:] = True
@@ -407,9 +416,12 @@ class InteractionVAE(nn.Module):
         else:  # learned composition directly passed in
             return composition_mask
 
-    # sample composite interactions, suppose all inputs have two atomic interactions
-    # use attention mask to limit upper body to attend to 'touch' related object, lower body to the other object
+
     def sample_composition(self, batch):
+        """
+        sample composite interactions, suppose all inputs have two atomic interactions
+        use attention mask to limit upper body to attend to 'touch' related object, lower body to the other object
+        """
         self.eval()
 
         with torch.no_grad():

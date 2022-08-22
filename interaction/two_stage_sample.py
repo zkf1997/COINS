@@ -17,11 +17,14 @@ from sample_interaction import get_composition_mask
 from chamfer_distance import chamfer_dists
 
 def rotation_matrix_vector_multiply(rot_mat, rot_vec):
+    """Multiply rotations represented as matrix and axis-angle vector, return as axis-angle vector."""
     rotation = torch.matmul(rot_mat, pytorch3d.transforms.axis_angle_to_matrix(rot_vec))
     return pytorch3d.transforms.rotation_conversions.matrix_to_axis_angle(rotation)
 
-# suppose all points in scene coordinate frame
 def calc_interaction_loss(body, contact, object_pointclouds, scene, return_full=False):
+    """
+    Calculate interaction losses. Suppose all points in scene coordinate frame
+    """
     batch_size = body.shape[0]
     contact_semantic, contact_scene = contact[:, :, 0], contact[:, :, 1]
     dists = chamfer_dists(body, object_pointclouds.reshape(batch_size, -1, 3))
@@ -41,6 +44,7 @@ def calc_interaction_loss(body, contact, object_pointclouds, scene, return_full=
         return loss
 
 def posa_optimize(smplx_param, contact, pelvis_init, object_points, scene):
+    """Optimize body pose, global translation, and global orientation guided by interaction-based terms"""
     batch_size = contact.shape[0]
     device = contact.device
     rotation_init = rot6d_to_mat(pelvis_init[:, :6])  # 1x3x3
@@ -89,6 +93,11 @@ def posa_optimize(smplx_param, contact, pelvis_init, object_points, scene):
     return loss_total.item(), smplx_param, vertices_scene.detach().clone()
 
 def two_stage_sample(method='direct'):
+    """
+    Sample interactions in a given scene with the semantics of specified action-object pairs.
+    When 'used_scene_names' and 'used_interactions' are set to 'all', this function iterates over all specified scenes and all action-object combinations and synthesize interactions for large scale evaluation.
+    You can choose to synthesize a specific interaction in a specific scene by configuring 'used_scene_names' and 'used_interactions'.
+    """
     for scene_name in tqdm(used_scene_names):
         # scene_sdfs = get_scene_sdfs([scene_name], device=device)
         scene = scenes[scene_name]
@@ -208,6 +217,7 @@ def two_stage_sample(method='direct'):
                                 body_mesh = skeleton_to_mesh(bodies[0].detach().cpu().numpy(), color=np.array(color_map(sample_idx / args.sample_num)))
                             body_meshes = [frame, body_mesh]
 
+                            # render synthesis results
                             base_name = scene_name + '_' + combination_name + '_' + str(sample_idx) + '_' + method + '.png'
                             export_file = Path(args.save_dir, args.exp_name, method, interaction, base_name)
                             export_file.parent.mkdir(exist_ok=True, parents=True)
@@ -242,6 +252,9 @@ def two_stage_sample(method='direct'):
                         pickle.dump(synthesis_results, result_file)
 
 def two_stage_composition_sample(method='direct', mask_type='learned_by_part'):
+    """
+    Sample composite interactions in a given scene with the semantics of specified action-object pairs.
+    """
     used_scenes = test_scenes if args.scene_name == 'test' else [args.scene_name]
     for scene_name in tqdm(used_scenes):
         scene = scenes[scene_name]
@@ -476,9 +489,6 @@ if __name__ == '__main__':
     z_pelvis_global = np.random.randn(args.num_sample, args.num_try, transform_model.args.latent_dim).astype(np.float32)
     z_body_global = np.random.randn(args.num_sample, args.num_try, interaction_model.args.latent_dim).astype(np.float32)
     if args.composition:
-        # two_stage_composition_sample(method='optim', mask_type='naive')
-        # two_stage_composition_sample(method='direct', mask_type='naive')
-        # two_stage_composition_sample(method='direct', mask_type='learned_by_part')
         two_stage_composition_sample(method='optim', mask_type='learned_by_part')
     else:
         two_stage_sample(method='optimization_after_get_body')

@@ -80,6 +80,9 @@ class Mesh(object):
         self.body_part_vertices_full = self.downsample_body_part_vertices(body_part_vertices_full)
 
     def downsample_body_part_vertices(self, body_part_vertices):
+        """
+        Get vertices list of each body part on downsampled meshes
+        """
         downsample_level = self.num_downsampling
         last_body_part_vertices = body_part_vertices
         for level in range(downsample_level):

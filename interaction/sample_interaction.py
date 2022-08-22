@@ -10,6 +10,9 @@ from interaction.utils import *
 from interaction.viz_util import *
 
 def get_data_loader():
+    """
+    Create a interaction data loader where we select one frame from each action-object combination.
+    """
     with open(Path.joinpath(project_folder, "data", 'test.pkl'), 'rb') as data_file:
         test_data = pickle.load(data_file)
     with open(Path.joinpath(project_folder, "data", 'train.pkl'), 'rb') as data_file:
@@ -54,6 +57,7 @@ def get_data_loader():
     return test_loader
 
 def sample(sample_num=1024):
+    """Sample interactions using inputs in data loader"""
     sample_dict = {}
     for batch in tqdm(data_loader):
         scene_name, num_atomics = batch['scene_name'][0], batch['num_atomics'][0]
@@ -98,7 +102,6 @@ def get_composition_mask(composition_mask_type, scene_name, atomics, interaction
         composition_mask[Pb + Po:, Pb:Pb + Po] = True
         for atomic_idx in range(len(atomics)):
             mask_vertices = np.nonzero(contact_probability[atomic_idx, :] < mask_thresh_by_vertex)[0]
-            # print(mask_vertices)
             composition_mask[mask_vertices, Pb + Po * atomic_idx: Pb + Po * (atomic_idx+1)] = True
         return composition_mask
     if composition_mask_type == 'learned_by_part':
@@ -117,6 +120,7 @@ def get_composition_mask(composition_mask_type, scene_name, atomics, interaction
         return composition_mask_type
 
 def render(z=None):
+    """Sample interactions using inputs in data loader and render results"""
     for batch in tqdm(data_loader):
         scene_name, num_atomics = batch['scene_name'][0], batch['num_atomics'][0]
         atomics = batch['interaction'][0].split('+')
@@ -192,11 +196,6 @@ def render(z=None):
                 obj_points = obj_points_coord[idx, :, :, :].reshape((-1, 3))
 
                 for joint_idx in range(num_body_points):
-                    # attention_obj_1 = attention[joint_idx, num_body_points: num_body_points + num_obj_keypoints]
-                    # attention_obj_2 = attention[joint_idx, num_body_points + num_obj_keypoints:]
-                    # major_obj = 0 if attention_obj_1.sum() > attention_obj_2.sum() else 1
-                    # attention_line = np.array([body_points[joint_idx], object_centroids[major_obj]])
-                    # body_mesh = body_mesh + trimesh.creation.cylinder(0.01, segment=attention_line, vertex_colors=(0.8, 0.8, 0.1) if major_obj else (0.8, 0.1, 0.8))
                     values, indices = attention[joint_idx, num_body_points:].topk(5, largest=True)
                     for value, index in zip(values, indices):
                         point_idx = index.item()
@@ -204,36 +203,6 @@ def render(z=None):
                         lines.append(trimesh.creation.cylinder(min(0.015, value.item()), segment=attention_line,
                                                                           vertex_colors=(0.8, 0.8, 0.1) if point_idx < num_obj_keypoints else (0.8, 0.1, 0.8)))
 
-                # for point_idx in np.random.choice(obj_points.shape[0], int(obj_points.shape[0] * 1)):
-                #     attention_joint = attention[:num_body_points, num_body_points + point_idx].argmax()
-                #     value = attention[:num_body_points, num_body_points + point_idx][attention_joint]
-                #     if value < 0.001:
-                #         continue
-                #     attention_line = np.array([body_points[attention_joint], obj_points[point_idx]])
-                #     # print(attention_line)
-                #     joint_type = 0 if attention_joint in [1, 2, 4, 5, 7, 8, 10, 11] else 1
-                #     point_type = 0 if point_idx < num_obj_keypoints else 1
-                #     color = joint_type * 2 + point_type
-                #     color_table = np.array([[0.8, 0, 0],
-                #                             [0.8, 0.8, 0],
-                #                             [0, 0.8, 0],
-                #                             [0, 0, 0.8],
-                #                             ])
-                #
-                #     lines.append(trimesh.creation.cylinder(min(0.015, value.item()), segment=attention_line,
-                #                                            vertex_colors=color_table[color]))
-
-                # # valid_attention = attention[:num_body_points, num_body_points:]
-                # # print(valid_attention.max(), valid_attention.min())
-                # values, indices = attention[:num_body_points, num_body_points:].flatten().topk(int(num_body_points * 2 * num_obj_keypoints * 0.01), largest=True)
-                # values = values / values.max()
-                # for value, index in zip(values, indices):
-                #     joint_idx = index.item() // (num_obj_keypoints * 2)
-                #     point_idx = index.item() % (num_obj_keypoints * 2)
-                #     attention_line = np.array([body_points[joint_idx], obj_points[point_idx]])
-                #     # print(attention_line)
-                #     body_mesh = body_mesh + trimesh.creation.cylinder(0.005 * value.item(), segment=attention_line,
-                #                                                       vertex_colors=(0.8, 0.8, 0.1) if point_idx < num_obj_keypoints else (0.8, 0.1, 0.8))
                 obj_meshes = obj_meshes + lines
 
             # body_mesh.show()
@@ -288,34 +257,10 @@ if __name__ == "__main__":
         args.composition_sample = 'no'
         args.model_name = 'naive'
         render(z)
-        # args.composition_sample = 'diagonal'
-        # args.model_name = 'diagonal'
-        # render(z)
-        # args.composition_sample = 'manual'
-        # args.model_name = 'manual'
-        # render(z)
-        # args.composition_sample = 'learned_by_vertex'
-        # args.model_name = 'learned_by_vertex'
-        # render(z)
         args.composition_sample = 'learned_by_part'
         args.model_name = 'learned_by_part'
         render(z)
 
-    # composition evaluation
-    # sample_dict = sample(sample_num=10240)
-    # dist_dict = {}
-    # mesh = scenes['MPH1Library'].get_mesh_with_accessory(11)  #table mesh
-    # for interaction in sample_dict:
-    #     dist_list = []
-    #     for batch in sample_dict[interaction]:
-    #         hands = batch[:, -2:, :].detach().cpu().numpy()
-    #         signed_dists = -trimesh.proximity.signed_distance(mesh, hands.reshape((args.sample_num*2, 3))).reshape(args.sample_num, 2)
-    #         signed_dists = np.min(signed_dists, axis=1)
-    #         dist_list.append(signed_dists)
-    #     signed_dists = np.concatenate(dist_list)
-    #     dist_dict[interaction] = {'mean': signed_dists.mean(), 'fail_count': signed_dists[signed_dists > 0.05].shape}
-    #
-    # print(dist_dict)
 
 
 

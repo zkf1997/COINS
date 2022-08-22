@@ -50,6 +50,15 @@ def get_smplx_vertices(seq_data):
     return vertices, joints, body_model
 
 def visualize(interaction_data, full_scene=True, skip_frame=1, start_frame=0):
+    """
+    Visualize interaction data with configurable options.
+
+    Input:
+        interaction_data: list of interaction frames
+        full_scene: bool, choose to visualize the full scene or only interaction objects
+        skip_frame: int, control the frame rate of visualization
+        start_frame: int, specify the index of the starting frame for visualization
+    """
     # renderer
     vis = o3d.visualization.Visualizer()
     vis.create_window(width=1920, height=1080, top=0, left=0, visible=True)
@@ -113,6 +122,18 @@ def visualize(interaction_data, full_scene=True, skip_frame=1, start_frame=0):
     vis.destroy_window()
 
 def have_interaction(interaction_labels, query_interaction, mode='verb-noun', exact_match=False):
+    """
+    Check if a given interaction labels matches query.
+
+    Input:
+        interaction_labels: list of interaction labels in the format of verb or verb-noun
+        query_interaction: the queried interaction combination, list of interaction labels in the format of verb or verb-noun
+        mode: str, specify using verb or verb-noun mode
+        exact_match: bool, define matching as exactly the same or containing the queried interactions
+
+    Output:
+        result: whether the interaction_labels match query_interaction
+    """
     if mode == 'verb':
         interaction_labels = [interaction.split('-')[0] for interaction in interaction_labels]
 
@@ -120,6 +141,9 @@ def have_interaction(interaction_labels, query_interaction, mode='verb-noun', ex
     return result
 
 def get_interaction_segments(query_interaction, interaction_data, mode='verb-noun', exact_match=False):
+    """
+    Filter interaction frames that match the queried interaction
+    """
     results = [record for record in interaction_data if have_interaction(record['interaction_labels'], query_interaction, mode=mode, exact_match=exact_match)]
 
     return results

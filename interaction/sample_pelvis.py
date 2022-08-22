@@ -76,59 +76,6 @@ def composition_sample(model, batch_size, batch_list, optimizer=None, lr=3e-4, m
     result = ((sample0 + sample1) / 2.0).detach().clone()
     return result
 
-def sample_CAD():
-    modelnet_foler = '/local/home/zkf/ModelNet40/'
-    evaluate_categories = [
-        'bed',
-        'bench',
-        'chair',
-        'desk',
-        'laptop',
-        'sofa',
-        'table',
-    ]
-    verbs = ['sit on', 'stand on', 'lie on', 'touch']
-    for category in tqdm(evaluate_categories):
-        for file_path in glob.glob(os.path.join(modelnet_foler, category, 'test', '*'))[:10]:
-            print(file_path)
-            instance_mesh = trimesh.load_mesh(file_path.__str__())
-            instance_mesh.vertices /= 100.0  # to meter
-            obj_pointcloud = to_pointcloud([instance_mesh], num_points=transform_model.args.num_obj_points)[0]
-            obj_vertices, obj_vertex_colors, obj_vertex_normals = obj_pointcloud
-            obj_points = np.concatenate([obj_vertices, obj_vertex_colors, obj_vertex_normals], axis=1)  # Px9
-            obj_points = torch.tensor(obj_points, dtype=torch.float32, device=device).expand(args.sample_num, maximum_atomics, -1,
-                                                                                             -1).clone()  # Bx2xPx9
-            # obj_centroids = torch.mean(obj_points[:, :, :3], dim=1, keepdim=True)  # Bx1x3
-            # obj_points[:, :, :3] = obj_points[:, :, :3] - obj_centroids
-            #
-            # instance_mesh.vertices -= obj_centroids[0, 0, :].detach().cpu().numpy()
-            for verb_id, verb in enumerate(verb_code_dict):
-                batch = {
-                    'num_atomics': torch.ones(args.sample_num, device=device),
-                    'object_pointclouds': obj_points,
-                    'verb_ids': torch.tensor([verb_id, -1], device=device).expand(args.sample_num, -1),
-                }
-                # sample pelvis frame
-                x, attention = transform_model.model.sample(batch)
-                x = x.squeeze(1)
-
-                scene_mesh = instance_mesh
-                body_meshes = []
-                for sample_idx in range(args.sample_num):
-                    body_meshes.append(create_frame(x[sample_idx]))
-                body_mesh = trimesh.util.concatenate(body_meshes)
-
-                # render_mesh = scene_mesh + body_mesh
-                # render_mesh.show()
-
-                # render_scene.show()
-                img_collage = render_scene_three_view(scene_mesh, body_mesh)
-                export_name = verb + '-' + os.path.basename(file_path)[:-4] + '.png'
-                export_path = Path(args.save_dir, args.exp_name, 'modelnet', verb + '-' + category, export_name)
-                export_path.parent.mkdir(exist_ok=True, parents=True)
-                print(export_path)
-                img_collage.save(export_path)
-
 def visualize_distribution():
     used_scenes = test_scenes if args.scene_name == 'test' else [args.scene_name]
     for scene_name in tqdm(used_scenes):

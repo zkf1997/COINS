@@ -30,7 +30,7 @@ from configuration.joints import *
 # from data.frame_dataset import FrameDataset
 from interaction.dataset import CompositeFrameDataset
 from interaction.viz_util import render_obj_multview
-from data.scene import scenes, to_trimesh
+from data.scene import scenes, to_trimesh, to_open3d
 from data.utils import *
 from interaction.smplx_regressor import SMPLX_Regressor
 from interaction.loss import *
@@ -200,7 +200,7 @@ class LitTransformNet(pl.LightningModule):
         x_hat = x_hat.squeeze(1)
         loss, loss_dict, weighted_loss_dict = self.calc_loss(x, x_hat, q_z, batch=batch)
 
-        # visualize
+        # render reconstructed and sampled interactions
         render_interval = 64 if mode == 'valid' else 256
         if (batch_idx % render_interval == 0) and (self.current_epoch > self.args.render_epoch or self.args.debug):
             x_sample, _ = self.model.sample(batch)
@@ -217,11 +217,6 @@ class LitTransformNet(pl.LightningModule):
 
                 colors = np.ones((obj_points.shape[1], 4), dtype=np.uint8) * 255
                 colors[:, :3] = (obj_points[idx, :, 3:6].cpu().numpy() * 255).astype(np.uint8)
-                # body = trimesh.Trimesh(
-                #     vertices=body_vertices[idx].cpu().numpy() + pelvis[idx].cpu().numpy(),
-                #     faces=self.body_model.faces,
-                #     colors=(0.8, 0.8, 0.8, 0.3)
-                # )
                 body=None
                 obj_pointcloud = trimesh.PointCloud(
                     vertices=obj_points[idx, :, :3].cpu().numpy(),
@@ -231,10 +226,6 @@ class LitTransformNet(pl.LightningModule):
                 frame_rec = create_frame(x_hat[idx], origin_color=(0.0, 1.0, 0.0))
                 frame_sample = create_frame(x_sample[idx], origin_color=(0.0, 0.0, 1.0))
 
-                # export_file = Path.joinpath(save_dir, 'render', 'rec_' + base_name)
-                # export_file.parent.mkdir(exist_ok=True, parents=True)
-                # img_collage = render_obj_multview(obj_pointcloud, frame_rec)
-                # img_collage.save(str(export_file))
 
                 export_file = Path.joinpath(save_dir, 'render', 'contrast_' + base_name)
                 export_file.parent.mkdir(exist_ok=True, parents=True)
@@ -379,10 +370,6 @@ if __name__ == '__main__':
     if args.resume_checkpoint is not None:
         print('resume training')
         model = LitTransformNet.load_from_checkpoint(args.resume_checkpoint, args=args)
-        # trainer = pl.Trainer(gpus=args.gpus, resume_from_checkpoint=args.resume_checkpoint)
-        # save_dir = Path(trainer.logger.log_dir)  # for this version
-        # print(save_dir)
-        # trainer.fit(model, train_loader, val_loader)
     else:
         print('start training from scratch')
         model = LitTransformNet(args)

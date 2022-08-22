@@ -33,7 +33,8 @@ scene_names = ["BasementSittingBooth", "MPH11", "MPH112", "MPH16", "MPH1Library"
                "N0SittingBooth", "N0Sofa", "N3Library", "N3Office", "N3OpenArea", "Werkraum"]
 test_scenes = ['MPH1Library', 'MPH16', 'N0SittingBooth', 'N3OpenArea']
 train_scenes = sorted(list(set(scene_names) - set(test_scenes)))
-# manually selected object instances for interactions
+
+# manually selected object instances for interactions. For each scene and each objects category combination, we list the selected instance combinations.
 candidate_combination_dict = {
     'MPH1Library':{
         'wall': [[0]],
@@ -147,7 +148,6 @@ lower_body_parts = ["rightUpLeg", "leftLeg", "leftToeBase", "leftFoot", "rightFo
                     ]
 
 # map action to corresponding body parts
-# action_names = ['sit on', 'lie on', 'stand on', 'touch']
 action_names = ['sit on', 'lie on', 'stand on', 'touch', 'step back', 'restfoot', 'step down', 'turn', 'jump on', 'sit up', 'stand up', 'turnover', 'sit down', 'move on', 'lie down', 'move leg', 'walk on', 'a pose', 'step up', 'side walk']
 action_names_train = ['sit on', 'lie on', 'stand on', 'touch', 'jump on', 'turn', 'move leg', 'stand up', 'sit down', 'sit up', 'side walk', 'step down', 'walk on', 'a pose', 'lie down', 'step up', 'move on']
 num_verb = len(action_names)
@@ -159,21 +159,3 @@ action_body_part_mapping = {
     'stand on': ['L_Leg', 'R_Leg'],
     'touch': ['L_Hand', 'R_Hand'],
 }
-# joints list:https://github.com/vchoutas/smplx/blob/master/smplx/joint_names.py
-# related_joints_dict = {
-#     'sit on': [0, 1, 2],
-#     'lie on ': list(range(22)),
-#     'stand on': [7, 8, 10, 11],
-#     'touch': [20, 21],
-#     'restfoot': [7, 8, 10, 11],
-# }
-# verb_code_dict = {
-#                 'sit on': np.array([1, 0, 0, 0], dtype=np.float32),
-#                 'lie on': np.array([0, 1, 0, 0], dtype=np.float32),
-#                 'stand on': np.array([0, 0, 1, 0], dtype=np.float32),
-#                 'touch': np.array([0, 0, 0, 1], dtype=np.float32),
-#             }
-
-# # contact featurs
-# contact_feature_threshold = 0.1
-# contact_thresh = 0.05

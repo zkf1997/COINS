@@ -70,14 +70,6 @@ class LitInteraction(pl.LightningModule):
                 lower_body += mesh.body_part_vertices_full[part]
             args.body_segment = (upper_body, lower_body)
             self.mesh = mesh
-            # contact_vertices_list = []
-            # for idx, verb in enumerate(action_names):
-            #     vertices_idx = []
-            #     for body_part in action_body_part_mapping[verb]:
-            #         vertices_idx += mesh.body_part_vertices[body_part]
-            #     contact_vertices_list.append(vertices_idx)
-            # print(contact_vertices_list)
-            # self.contact_vertices_list = contact_vertices_list
             if args.use_regressor:
                 self.smplx_regressor = SMPLX_Regressor(mesh, args)
                 self.body_model = smplx.create(smplx_model_folder, model_type='smplx',
@@ -122,11 +114,11 @@ class LitInteraction(pl.LightningModule):
             print('not implemented')
             return
 
-    def on_train_start(self) -> None:
-        #     backup trainer.py and model
-        shutil.copy('./interaction_trainer.py', str(save_dir / 'interaction_trainer.py'))
-        shutil.copy('./interaction_model.py', str(save_dir / 'interaction_model.py'))
-        return
+    # def on_train_start(self) -> None:
+    #     #     backup trainer.py and model
+    #     shutil.copy('./interaction_trainer.py', str(save_dir / 'interaction_trainer.py'))
+    #     shutil.copy('./interaction_model.py', str(save_dir / 'interaction_model.py'))
+    #     return
 
     def forward(self, x, batch):
         return self.model(x, batch)
@@ -153,15 +145,10 @@ class LitInteraction(pl.LightningModule):
         x_hat, orient_hat, contact_hat = x_hat[:, :, :3], x_hat[:, :, 3:-self.args.contact_dim], x_hat[:, :, -self.args.contact_dim:]
 
         # contact loss
-        # loss_contact = calc_contact_loss(x_hat, batch['verb_ids'], self.contact_vertices_list,
-        #                                  batch['object_pointclouds'])
         loss_contact = torch.tensor(0.0).to(x.device)
 
         # penetration loss
         loss_penetration = torch.tensor(0.0).to(x.device)
-        # scene_sdfs = get_scene_sdfs(batch['scene_name'], device=x.device)
-        # body_vertices_in_scene = transform_back(x_hat, batch['centroid'], batch['rotation'])
-        # loss_penetration = calc_penetration_loss(scene_sdfs, body_vertices_in_scene, thresh=0)
 
         p_z = torch.distributions.normal.Normal(
             loc=torch.zeros((x.shape[0], self.args.latent_dim), requires_grad=False, device=device),
@@ -335,7 +322,7 @@ class LitInteraction(pl.LightningModule):
             loss = loss + smplx_loss
             loss_dict.update(smplx_loss_dict)
 
-        # visualize
+        # render reconstructed and sampled interactions
         render_interval = 256 if mode == 'valid' else 512
         if (batch_idx % render_interval == 0) and (self.current_epoch >= self.args.render_epoch or self.args.debug):
             x_sample = self.model.sample(batch)[0]

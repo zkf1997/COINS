@@ -23,8 +23,9 @@ from sklearn.decomposition import PCA
 DEBUG = False
 
 def to_trimesh(o3d_mesh):
-    # if isinstance(o3d_mesh, trimesh.Trimesh):
-    #     return o3d_mesh
+    """
+    convert open3d mesh to trimesh mesh
+    """
     return trimesh.Trimesh(
         vertices=np.asarray(o3d_mesh.vertices), faces=np.asarray(o3d_mesh.triangles),
         vertex_colors=np.asarray(o3d_mesh.vertex_colors),
@@ -32,6 +33,9 @@ def to_trimesh(o3d_mesh):
     )
 
 def to_open3d(trimesh_mesh):
+    """
+    convert trimesh mesh to open3d mesh
+    """
     trimesh_mesh = deepcopy(trimesh_mesh)  # if not copy, vertex normal cannot be assigned
     o3d_mesh = o3d.geometry.TriangleMesh(vertices=o3d.utility.Vector3dVector(trimesh_mesh.vertices),
                                          triangles=o3d.utility.Vector3iVector(trimesh_mesh.faces))
@@ -60,13 +64,19 @@ def get_intersection_2d(aabb1, aabb2):
     return np.concatenate([min_bound, max_bound])
 
 class ObjectNode:
+    """
+    Class for each object instance, with serialize and deserialize functions.
+    """
     def __init__(self, load=False, **kwargs):
+        """
+        Initializer from deserialized dict or key word arguments.
+        """
         # load from serialization
         if load:
             self.__dict__.update(kwargs)
         else:
-            self.id = kwargs.get('id')
-            self.scene = kwargs.get('scene')
+            self.id = kwargs.get('id')  #int, instance id
+            self.scene = kwargs.get('scene')  #str, scene_name
             self.category = kwargs.get('category')
             self.category_name = kwargs.get('category_name') if 'category_name' in kwargs else category_dict.loc[self.category]['mpcat40']
             self.vis_color = kwargs.get('vis_color')
@@ -91,6 +101,9 @@ class ObjectNode:
         self.vis_mesh = vis_mesh
         self.aabb.color = self.vis_color
 
+    """
+    Calculate object feature, only used by PiGraph 
+    """
     def calc_features(self):
         centroid = np.asarray(self.pointcloud.points).mean(axis=0)
         obb = self.pointcloud.get_oriented_bounding_box()
@@ -132,7 +145,14 @@ class ObjectNode:
         return cls(load=True, **serialized)
 
 class Scene:
+    """
+    Class for each object instance, with serialize and deserialize functions to accelerate loading.
+    """
     def __init__(self, scene_name, rebuild=False):
+        """
+        Load the scene specified by name. The scene contains a mesh and a list of object instances.
+        The object instances are loaded from cache for acceleration if exist or built from segmentation labels.
+        """
         scene_cache_path = os.path.join(scene_cache_folder, scene_name + '.pkl')
         # load from scene cache file if exist for acceleration
         if os.path.exists(scene_cache_path):
@@ -209,6 +229,9 @@ class Scene:
         return serialized
 
     def get_object_nodes(self, vertex_category_ids, vertex_instance_ids, segment_mesh):
+        """
+        Build the list of object instances from segmentation labels.
+        """
         # build object nodes
         self.object_nodes = []
         for instance_id in np.unique(vertex_instance_ids):
@@ -230,8 +253,12 @@ class Scene:
                                                 id=instance_id - 1))  # id -1 to make instance index start from 0, this makes object nodes array indexing more simple
 
     def get_visualize_geometries(self, semantic=False):
-        # if not semantic:
-        #     return [self.mesh]
+        """
+        Get the open3d geometries of the scene for visualization.
+
+        Input:
+            semantic: bool, configures to visualize using original mesh color or MPCAT40 object visualization color table.
+        """
         geometries = []
         # visualize scene
         mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -261,6 +288,9 @@ class Scene:
         vis.run()
 
     def save(self, semantic=True):
+        """
+        Render the scene and save to file.
+        """
         # render
         vis = o3d.visualization.Visualizer()
         vis.create_window(width=1920, height=1080, top=0, left=0, visible=False)
@@ -285,6 +315,9 @@ class Scene:
         vis.destroy_window()
 
     def log(self):
+        """
+        Log the scene instance segmentation.
+        """
         file_path = os.path.join(scene_cache_folder, self.name + '.txt')
         with open(file_path, 'w') as f:
             idx = 0
@@ -297,8 +330,10 @@ class Scene:
                                                       ))
                 idx += 1
 
-    # return complete meshes for single instances of sofa, bed, table by adding back accessory objects like cushion and objects
     def get_mesh_with_accessory(self, node_idx):
+        """
+        return complete meshes for single instances of sofa, bed, table by adding back accessory objects like cushion and objects
+        """
         if node_idx in self.mesh_with_accessory:
             return self.mesh_with_accessory[node_idx]
 
@@ -322,12 +357,22 @@ class Scene:
         return mesh
 
     def support_interaction(self, query_interaction):
+        """
+        Check whether the scene contains the objects in query interaction.
+        """
         atomic_interactions = query_interaction.split('+')
         nouns = [atomic.split('-')[1] for atomic in atomic_interactions]
         scene_objs = [node.category_name for node in self.object_nodes]
         return set(nouns).issubset(set(scene_objs))
 
     def get_interaction_candidate_objects(self, interaction, use_annotation=True):
+        """
+        Get the list of candidate object combinations in this scene for sepcified interaction.
+
+        Input:
+            interaction: str, the query interaction
+            use_annotation: bool, configures to use manual candidates annotation if available
+        """
         atomic_interactions = interaction.split('+')
         verbs = [atomic.split('-')[0] for atomic in atomic_interactions]
         nouns = [atomic.split('-')[1] for atomic in atomic_interactions]
@@ -352,6 +397,9 @@ class Scene:
         return verbs, nouns, candidate_combination
 
     def get_floor_height(self):
+        """
+        Get the floor height in this scene.
+        """
         if hasattr(self, 'floor_height'):
             return  self.floor_height
         floor_pointclouds = [np.asarray(obj_node.mesh.vertices) for obj_node in self.object_nodes if obj_node.category_name == 'floor']
@@ -367,6 +415,9 @@ class Scene:
         return floor_height
 
     def calc_sdf(self, vertices):
+        """
+        Calculate the scene SDF values of input vertices using precomputed SDF grid.
+        """
         if not hasattr(self, 'sdf_torch'):
             self.sdf_torch = torch.from_numpy(self.sdf).squeeze().unsqueeze(0).unsqueeze(0) # 1x1xDxDxD
         sdf_grids = self.sdf_torch.to(vertices.device)

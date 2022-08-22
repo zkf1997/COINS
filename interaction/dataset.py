@@ -31,6 +31,9 @@ from interaction.chamfer_distance import chamfer_dists
 from interaction.mesh import Mesh
 
 def to_smplx_input(record):
+    """
+    Convert interaction record to SMPLX body model input.
+    """
     for param in smplx_param_names:
         if param in record:
             record[param] = torch.tensor(record[param], dtype=torch.float32,
@@ -41,6 +44,9 @@ def to_smplx_input(record):
     return record
 
 def get_body_by_batch(body_model, smplx_input, batch_size=256):
+    """
+        Get SMPLX bodies in batch.
+    """
     body_model = smplx.create(smplx_model_folder, model_type='smplx',
                  gender='neutral', ext='npz',
                  num_pca_comps=num_pca_comps, batch_size=batch_size).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -76,6 +82,9 @@ def get_body_by_batch(body_model, smplx_input, batch_size=256):
 
 mesh = None
 def batch_downsample(vertices):
+    """
+    Downsample body mesh (from 10475 vertices to 655 vertices) in batch.
+    """
     global mesh
     if mesh is None:
         mesh = Mesh(num_downsampling=2)
@@ -92,8 +101,10 @@ def batch_downsample(vertices):
         last_frame = cur_frame
     return np.concatenate(vertices_downsampled, axis=0)
 
-# calculate distance from each vertex to each category of objects, if the object category not exist in one scene, assign a big distance
 def get_vertex_obj_dists(vertices, frame_scene_names):
+    """
+    calculate distance from each vertex to each category of objects, if the object category not exist in one scene, assign a big distance
+    """
     not_exist_distance = 10.0
     max_points = 4096 * 2  # maximum number of points for one object
     vertices = batch_downsample(vertices)
@@ -102,24 +113,6 @@ def get_vertex_obj_dists(vertices, frame_scene_names):
     for body_idx in tqdm(range(num_body)):
         scene_name = frame_scene_names[body_idx]
         scene = scenes[scene_name]
-        # if not hasattr(scene, 'category_kdtrees'):
-        #     category_instances = defaultdict(list)
-        #     for node in scene.object_nodes:
-        #         category_instances[node.category].append(node)
-        #     category_instances = [category_instances[category] for category in range(obj_category_num)]
-        #     category_pointclouds = [[np.asarray(instance.pointcloud.points, dtype=np.float32) for instance in instances]
-        #                             for instances in category_instances]
-        #     for pointclouds in category_pointclouds:
-        #         for pointcloud_idx in range(len(pointclouds)):
-        #             pointcloud = pointclouds[pointcloud_idx]
-        #             num_points = pointcloud.shape[0]
-        #             if num_points > max_points:
-        #                 pointclouds[pointcloud_idx] = pointcloud[
-        #                                               np.squeeze(farthest_point_sample(torch.from_numpy(pointcloud[None, :, :]), npoint=max_points).numpy()), :
-        #                                               ]
-        #     category_kdtrees = [KDTree(np.concatenate(pointclouds, axis=0)) if len(pointclouds) > 0 else None
-        #                         for pointclouds in category_pointclouds]
-        #     scene.category_kdtrees = category_kdtrees
         if not hasattr(scene, 'category_pointclouds'):
             category_instances = defaultdict(list)
             for node in scene.object_nodes:
@@ -133,10 +126,6 @@ def get_vertex_obj_dists(vertices, frame_scene_names):
             scene.category_pointclouds = category_pointclouds
 
         for category_idx in range(obj_category_num):
-            # kdtree = scene.category_kdtrees[category_idx]
-            # if kdtree is not None:
-            #     dists, i = kdtree.query(vertices[body_idx])
-            #     vertex_obj_dists[body_idx, :, category_idx] = dists
             category_pointclouds = scene.category_pointclouds
             if category_idx in category_pointclouds:
                 squared_dists = chamfer_dists(torch.from_numpy(vertices[[body_idx], :, :]).float().cuda(),
@@ -146,16 +135,33 @@ def get_vertex_obj_dists(vertices, frame_scene_names):
     return vertex_obj_dists
 
 def to_padded_array(input, length=maximum_atomics):
+    """
+    Convert input list to numpy array and pad with -1.
+    """
     output = np.ones(length) * -1
     output[:len(input)] = np.array(input)
     return output
 
 class InteractionDataset(Dataset):
+    """
+    Class for dataset of interaction frames.
+    """
     def __init__(self, interaction_data, obj_code='onehot', verb_code='onehot', use_augment='',
                  num_points=4096, center_type='human', scale_obj=False, normalize=False, used_interaction='all', used_instance=None,
                  point_sample='random', rotation=None, use_composite=True, skip_prox_composite=None,
                  include_motion=False,
                  single_frame=None, keep_frame=None, data_overwrite=False, split='train'):
+        """
+        Args:
+            num_points: int, number of points we use to represent each object
+            center_type: ['human', 'object'], use the human pelvis or object center to canonicalize coordinates
+            point_sample: ['random, 'uniform'], method to sample points from object mesh vertices, 'random' uses random sampling and 'uniform' uses farthest point sampling
+            used_interaction: str, select one category of interaction data like 'stand on-floor' or all data using 'all'
+            use_composite: bool, whether to include composite interaction data
+            include_motion: bool, whether to include the dynamic interaction such as 'step up-chair', 'lie down-sofa'
+            data_overwrite: bool, whether to overwrite data file
+            split: ['train', 'test'], dataset split
+        """
         # get scene object pointclouds
         pointcloud_dict = {}
         used_scenes = train_scenes if split =='train' else test_scenes
@@ -278,6 +284,28 @@ class InteractionDataset(Dataset):
         self.split = split
 
     def __getitem__(self, idx):
+        """
+        Return:
+            smplx_param: smplx body params
+            full_pose: smplx body pose, 155D
+            pelvis: pelvis location
+            joints: body joints locations
+            body_vertices: body vertices locations
+            contact_dist: distance from downsampled body vertices to interaction objects
+            sdf: scene SDF value of downsampled body vertices
+            joint_contact_dist: distance from body joints to interaction objects
+            joint_sdf: scene SDF value of body joints
+            object_pointclouds: point clouds of interaction objects
+            interaction: str, interaction description
+            frame_idx: frame index in orginal video sequence
+            num_atomics: number of atomic interactions
+            interaction_obj_ids: padded instance id of interaction objects
+            verb_ids: padded verb id of verbs in this interaction
+            noun_ids: padded noun id of nouns in this interaction
+            scene_name: name of the scene where this interaction frame is captured
+            centroid: location of the local coord system origin in the scene coord system
+            rotation: rotation from the scene coord system to local coord system
+        """
         # record = self.data[-1]
         record = self.data[idx] if self.single_frame is None else self.data[self.single_frame]
         scene = scenes[record['scene_name']]
@@ -405,8 +433,6 @@ class InteractionDataset(Dataset):
 
         }
         return record_data
-        # return smplx_param, pelvis, joints, body_vertices - pelvis.reshape((1, 3)), obj_points, centroid, scale, rotation, \
-        #        record['atomic_interaction'], record['obj_category_code'], record['verb_code'], record['scene_name'], record['node_idx']
 
     def __len__(self):
         return len(self.data)
@@ -454,13 +480,6 @@ class InteractionDataset(Dataset):
             vis.update_renderer()
             vis.clear_geometries()
 
-            # translation = np.eye(4)
-            # translation[:3, 3] = -pelvis
-            # rotation = np.eye(4)
-            # rotation[:3, :3] = global_orient.as_matrix()
-            # transform = np.matmul(np.linalg.inv(rotation), translation)
-            # print(transform)
-
 
 class CompositeFrameDataset(Dataset):
 
@@ -468,6 +487,15 @@ class CompositeFrameDataset(Dataset):
                  use_prox_single=False, data_overwrite=False, use_annotate=True,
                  include_motion=False, use_floor_height=False,
                  used_interaction='all', skip_prox_composite=None):
+        """
+        Args:
+            num_points: int, number of points we use to represent each object
+            used_interaction: str, select one category of interaction data like 'stand on-floor' or all data using 'all'
+            use_floor_height: bool, if set true, recenter the scene coords system origin on the floor by subtracting floor height
+            include_motion: bool, whether to include the dynamic interaction such as 'step up-chair', 'lie down-sofa'
+            data_overwrite: bool, whether to overwrite data file
+            split: ['train', 'test'], dataset split
+        """
         self.split = split
         self.augment = augment
         self.use_floor_height = use_floor_height
@@ -579,6 +607,20 @@ class CompositeFrameDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        """
+                Return:
+                    pelvis: pelvis location
+                    pelvis_orient: pelvis orientation
+                    object_pointclouds: point clouds of interaction objects
+                    interaction: str, interaction description
+                    num_atomics: number of atomic interactions
+                    interaction_obj_ids: padded instance id of interaction objects
+                    verb_ids: padded verb id of verbs in this interaction
+                    noun_ids: padded noun id of nouns in this interaction
+                    scene_name: name of the scene where this interaction frame is captured
+                    centroid: location of the local coord system origin in the scene coord system
+                    rotation: rotation from the scene coord system to local coord system
+                """
         record = self.data[idx % len(self.data)]
         # interaction as verb-noun of specified atomics
         specified_atomics = record['interaction'].split('+')
