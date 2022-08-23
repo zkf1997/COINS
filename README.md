@@ -57,7 +57,7 @@ Currently, the script supports choosing PROX scenes by `--scene_name` and intera
 
 You may freely manipulate the weights.
 
-## Training
+## Training Generative Models
 We use [PyTorch Lightning](https://www.pytorchlightning.ai/) for model training. Please refer to its documentation if you want to customize trainer features such as logging, checkpoint, resume training, etc. 
 
 To train BodyVAE, please run:
@@ -70,6 +70,31 @@ To train PelvisVAE, please run:
 cd interaction; python transform_trainer.py --expr_name floor_all --model InteractionVAE --weight_kl 1 --weight_pelvis 3 --weight_orient 1 --weight_dist 1 --weight_coord 1 --weight_penetration 3  --used_interaction 'all' --use_annealing 0 --robust_kl 1 --batch_size 8 --use_augment 1 --thresh_penetration 0.25 --second_stage 10 --num_obj_keypoints 256 --num_obj_points 8192 --num_layers 2 --embedding_dim 64 --latent_dim 6 --use_prox_single 1 --include_motion 1 --use_annotate 0 --data_overwrite 0 --use_pointnet2 1 --use_floor_height 1
 ```
 The trained models with logs can be found in `./results/interaction` and `./results/transform`. You can set `--debug 1` to render samples for inspection during training.
+
+## Baselines
+<details>
+<summary>In case you want to run the baselines</summary>
+
+### PiGraph-X
+The code for PiGraph-X can be found in the folder [pigraph](./pigraph). 
+To synthesize interactions using PiGraph-X, you can run:
+```
+cd pigraph; python synthesize.py --use_penetration 0 --composition 0 --visualize 1 --gender neutral --num_results 8 --num_skeletons 8 --num_translations 32 --num_rotations 12 --interaction 'sit on-chair' --scene_name 'MPH16' --save_dir pigraph_normal
+```
+You can refer to [synthesize.sh](./pigraph/synthesize.sh) for large-scale synthesis for evaluation.
+
+### POSA-I
+The POSA-I method consists of the following three steps:
+#### Train generative model for body with contact features
+Please see [body_trainer.py](interaction/body_trainer.py)
+#### Sample bodies with contact feature
+Please see [sample_body_feature.py](interaction/sample_body_feature.py).
+#### Place bodies into scenes using POSA
+Please first download the [POSA](https://posa.is.tue.mpg.de/index.html) code and data files. Then merge the [POSA](./POSA) folder with the POSA code from original author.
+Please check the instructions in orginal POSA repo and then refer to [synthesize.py](POSA/synthesize.py) for synthesis.
+
+The code of POSA-I is currently distributed in [inteaction](./interaction) and [POSA](./POSA), as well as the origial POSA repo. It is currently kind of messy and will potentially be restructured.
+</details>
 
 ## License
 We employ MIT license for this repository, with the exceptions of codes borrowed or modified from other works:

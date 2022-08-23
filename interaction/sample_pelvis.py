@@ -13,6 +13,7 @@ from viz_util import *
 from utils import *
 
 def to_pointcloud(obj_meshes, num_points, sample_surface=False):
+    """Convert object meshes to pointclouds with specified number of points"""
     obj_pointcloud = []
     for obj_mesh in obj_meshes:
         if sample_surface:
@@ -45,6 +46,7 @@ def to_pointcloud(obj_meshes, num_points, sample_surface=False):
     return obj_pointcloud
 
 def composition_sample(model, batch_size, batch_list, optimizer=None, lr=3e-4, max_step=100, weight_prob=1.0, z=None):
+    """Compositional pelvis sampling. Sample separate latent codes for each atomic interaction, then optimize the latent codes to make the decoded pelvis frames to be as close as possible."""
     assert len(batch_list) == 2
     device = model.device
     prior = torch.distributions.normal.Normal(
@@ -70,13 +72,11 @@ def composition_sample(model, batch_size, batch_list, optimizer=None, lr=3e-4, m
         loss = consistency_loss - weight_prob * log_prob
         loss.backward()
         optimizer.step()
-    # print(z0, z1)
-    # print(F.l1_loss(sample0, sample1))
-    # return sample0
     result = ((sample0 + sample1) / 2.0).detach().clone()
     return result
 
 def visualize_distribution():
+    """Sample multiple pelvis frames for each combination of action-object, render the pelvis frames to illustrate the pelvis distribution."""
     used_scenes = test_scenes if args.scene_name == 'test' else [args.scene_name]
     for scene_name in tqdm(used_scenes):
         # for scene_name in tqdm(['MPH16']):
@@ -108,10 +108,6 @@ def visualize_distribution():
                     # copy last padding
                     if len(pointcloud_list) < maximum_atomics:
                         object_points[1, :, :] = object_points[0, :, :]
-                    # recenter
-                    # coords = object_points[:, :, :3].reshape((-1, 3))
-                    # centroid = 0.5 * (coords.max(axis=0) + coords.min(axis=0)) * 0
-                    # object_points[:, :, :3] = object_points[:, :, :3] - centroid
                     object_points = torch.tensor(object_points, device=device).unsqueeze(0).expand(args.sample_num, -1,
                                                                                                    -1, -1)  # Bx2xPx9
 
@@ -123,19 +119,12 @@ def visualize_distribution():
                     # sample pelvis frame
                     x, attention = transform_model.model.sample(batch)
                     x = x.squeeze(1)
-                    # rotation = rot6d_to_mat(x[:, :6])
-                    # pelvis = x[:, 6:]
-                    # x[:, 6:] += obj_centroids.squeeze()
 
                     body_meshes = []
                     for sample_idx in range(args.sample_num):
                         body_meshes.append(create_frame(x[sample_idx]))
                     body_mesh = trimesh.util.concatenate(body_meshes)
 
-                    # render_mesh = scene_mesh + body_mesh
-                    # render_mesh.show()
-
-                    # render_scene.show()
                     img_collage = img_collage = render_interaction_multview(body=body_mesh,
                                                                       static_scene=scene_mesh if args.full_scene else trimesh.util.concatenate(obj_meshes))
                     file_name = scene_name + '_' + combination_name + '.png'
@@ -143,95 +132,15 @@ def visualize_distribution():
                     file_path.parent.mkdir(exist_ok=True, parents=True)
                     img_collage.save(file_path)
 
-def visualize_attention():
-    for scene_name in tqdm(scene_names):
-        for interaction in tqdm(interaction_names):
-            if scenes[scene_name].support_interaction(interaction):
-                verbs, nouns, obj_combinations = scenes[scene_name].get_interaction_candidate_objects(interaction)
-                verb_ids = [action_names.index(verb) for verb in verbs]
-                if len(verb_ids) < maximum_atomics:
-                    verb_ids = verb_ids + [-1] * (maximum_atomics - len(verb_ids))
-                verb_ids = torch.tensor(verb_ids, device=device).unsqueeze(0).expand(args.sample_num, -1)  # Bx2
-
-                for combination in obj_combinations:
-                    obj_meshes = []
-                    combination_name = ''
-                    for atomic_idx, instance in enumerate(combination):
-                        combination_name += verbs[atomic_idx] + '-' + nouns[atomic_idx] + '_' + str(instance.id)
-                        obj_mesh = deepcopy(scenes[scene_name].get_mesh_with_accessory(instance.id))
-                        obj_mesh.vertices -= np.array(
-                            [0.0, 0.0, scenes[scene_name].get_floor_height()])  # convert to height relative to floor
-                        obj_meshes.append(obj_mesh)
-                    pointcloud_list = to_pointcloud(obj_meshes, num_points=transform_model.args.num_obj_points)
-                    print(combination_name)
-
-                    object_points = np.zeros((maximum_atomics, transform_model.args.num_obj_points, 9), dtype=np.float32)
-                    for obj_idx, obj_pointcloud in enumerate(pointcloud_list):
-                        object_points[obj_idx, :, :] = np.concatenate(obj_pointcloud, axis=1)
-                    # copy last padding
-                    if len(pointcloud_list) < maximum_atomics:
-                        object_points[1, :, :] = object_points[0, :, :]
-                    # recenter
-                    # coords = object_points[:, :, :3].reshape((-1, 3))
-                    # centroid = 0.5 * (coords.max(axis=0) + coords.min(axis=0))
-                    # object_points[:, :, :3] = object_points[:, :, :3] - centroid
-                    object_points = torch.tensor(object_points, device=device).unsqueeze(0).expand(args.sample_num, -1,
-                                                                                                   -1, -1)  # Bx2xPx9
-
-                    batch = {
-                        'num_atomics': torch.ones(args.sample_num, device=device) * len(verbs),
-                        'object_pointclouds': object_points,
-                        'verb_ids': verb_ids,
-                    }
-                    # sample pelvis frame
-                    x, attention_list = transform_model.model.sample(batch)
-                    x = x.squeeze(1)
-                    # rotation = rot6d_to_mat(x[:, :6])
-                    # pelvis = x[:, 6:]
-                    # x[:, 6:] += obj_centroids.squeeze()
-
-                    scene_mesh = trimesh.util.concatenate(obj_meshes)
-
-                    for sample_idx in range(args.sample_num):
-                        body_mesh = create_frame(x[sample_idx])
-
-                        point_coords = object_points[sample_idx, :len(combination), :, :3].detach().cpu().numpy().reshape((-1, 3))
-                        attention = attention_list[-1][sample_idx, 0, :1 + transform_model.args.num_obj_points * len(combination)].detach().cpu().numpy()
-                        attention = attention[1:] / attention[1:].max()
-                        # print(attention.max(), attention.mean())
-                        point_colors = attention.reshape((-1, 1)) * np.array([1.0, 0.0, 0.0, 1.0]).reshape((1, 4)) + np.array([0.0, 0.0, 0.0, 0.0])
-                        # print(point_colors)
-
-                        num_render_points = int(0.2 * point_coords.shape[0])
-                        point_idx = np.argsort(attention)[-num_render_points:]
-                        render_points = trimesh.points.PointCloud(
-                            vertices=point_coords[point_idx, :],
-                            colors=np.uint8(point_colors[point_idx, :] * 255),
-                        )
-                        # render_points.show()
-                        # scene_meshes.append(render_points)
-                        #
-                        # render_mesh = scene_mesh + body_mesh
-                        # render_mesh.show()
-
-                        # render_scene.show()
-                        img_collage = render_scene_three_view(scene_mesh, body_mesh, render_points=render_points, center='scene')
-                        file_name = scene_name + '_' + combination_name + '_' + str(sample_idx) + '.png'
-                        file_path = Path(args.save_dir, args.exp_name, 'attention', interaction, file_name)
-                        file_path.parent.mkdir(exist_ok=True, parents=True)
-                        img_collage.save(file_path)
-
-
 def visualize_composite_sample_distribution():
+    """Sample multiple pelvis frames by calling composition_sample, render the pelvis frames to illustrate the pelvis distribution."""
     used_scenes = test_scenes if args.scene_name == 'test' else [args.scene_name]
     for scene_name in tqdm(used_scenes):
-    # for scene_name in tqdm(['MPH16']):
         scene_mesh = deepcopy(to_trimesh(scenes[scene_name].mesh))
         scene_mesh.vertices -= np.array(
         [0.0, 0.0, scenes[scene_name].get_floor_height()])  # convert to height relative to floor
         used_interactions = composed_interaction_names if args.interaction == 'all' else [args.interaction]
         for interaction in tqdm(used_interactions):
-        # for interaction in tqdm(['stand on-floor+touch-table']):
             if '+' in interaction and scenes[scene_name].support_interaction(interaction):
                 verbs, nouns, obj_combinations = scenes[scene_name].get_interaction_candidate_objects(interaction)
                 verb_ids = [[action_names.index(verb), -1] for verb in verbs]  # 2x2
@@ -253,10 +162,6 @@ def visualize_composite_sample_distribution():
                     for obj_idx, obj_pointcloud in enumerate(pointcloud_list):
                         object_points[obj_idx, 0, :, :] = np.concatenate(obj_pointcloud, axis=1)
                         object_points[obj_idx, 1, :, :] = object_points[obj_idx, 0, :, :] # copy last padding
-                    # recenter
-                    # coords = object_points[:, :, :3].reshape((-1, 3))
-                    # centroid = 0.5 * (coords.max(axis=0) + coords.min(axis=0))
-                    # object_points[:, :, :3] = object_points[:, :, :3] - centroid
                     object_points = torch.tensor(object_points, device=device).unsqueeze(0)  # Bx2x2xPx9
 
                     batch_list = [{
@@ -284,10 +189,6 @@ def visualize_composite_sample_distribution():
                         body_meshes.append(create_frame(x[sample_idx]))
                     body_mesh = trimesh.util.concatenate(body_meshes)
 
-                    # render_mesh = scene_mesh + body_mesh
-                    # render_mesh.show()
-
-                    # render_scene.show()
                     img_collage = render_interaction_multview(body=body_mesh,
                                                                       static_scene=scene_mesh if args.full_scene else trimesh.util.concatenate(obj_meshes))
                     file_name = scene_name + '_' + combination_name + '.png'
@@ -296,13 +197,6 @@ def visualize_composite_sample_distribution():
                     img_collage.save(file_path)
 
 if __name__ == '__main__':
-    # num_obj_combination = 0
-    # for scene_name in tqdm(test_scenes):
-    #     for interaction in tqdm(interaction_names):
-    #         if scenes[scene_name].support_interaction(interaction):
-    #             verbs, nouns, obj_combinations = scenes[scene_name].get_interaction_candidate_objects(interaction)
-    #             num_obj_combination += len(obj_combinations)
-    # print('num of object combination:', num_obj_combination)
 
     parser = ArgumentParser()
     parser.add_argument("--transform_checkpoint", type=str, default="/mnt/scratch/scene_graph/results/transform/evaluation_atomic/version_2/checkpoints/last.ckpt")
@@ -327,15 +221,8 @@ if __name__ == '__main__':
     transform_model.args.mask_body = 0
 
     with torch.no_grad():
-    # sample_CAD()
-    #
-    #     # args.sample_num = 2
-    #     # visualize_attention()
-    #
-        # args.sample_num = 32
         visualize_distribution()
 
-    # args.sample_num = 32
     visualize_composite_sample_distribution()
 
 

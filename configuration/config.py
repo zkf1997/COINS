@@ -3,6 +3,9 @@ import json
 import pandas as pd
 import numpy as np
 from PIL import ImageColor
+import platform
+
+local_machine = (platform.node() == 'dalcowks')
 
 proxe_base_folder = Path("/home/kaizhao/projects/COINS/proxe")
 scene_folder = Path.joinpath(proxe_base_folder, "scenes_semantics")
@@ -11,7 +14,8 @@ cam2world_folder = Path.joinpath(proxe_base_folder, "cam2world")
 # human_folder = Path.joinpath(proxe_base_folder, "PROX_temporal/PROXD_temp_v2")
 # graph_folder = Path.joinpath(proxe_base_folder, "scene_graph")
 scene_cache_folder = Path.joinpath(proxe_base_folder, 'scene_segmentation')
-# posa_folder = Path.joinpath(proxe_base_folder, 'POSA_dir')
+# downloaded files from POSA: https://posa.is.tue.mpg.de/index.html
+posa_folder = Path.joinpath(proxe_base_folder, 'POSA_dir')
 mesh_ds_folder = Path.joinpath(proxe_base_folder, 'POSA_dir', 'mesh_ds')
 # smplx models
 smplx_model_folder = Path.joinpath(proxe_base_folder, "models_smplx_v1_1/models")
@@ -19,6 +23,8 @@ smplx_model_folder = Path.joinpath(proxe_base_folder, "models_smplx_v1_1/models"
 project_folder = Path(__file__).resolve().parents[1]
 # mesh upsample and downsample weights
 mesh_operation_file = Path.joinpath(project_folder, "data", 'mesh_operation.npz')
+# tranformation matrix between PROX and POSA scenes
+scene_registration_file = Path.joinpath(project_folder, "data", 'scene_registration.pkl')
 # checkpoints
 checkpoint_folder = Path.joinpath(project_folder, 'checkpoints')
 checkpoint_folder.mkdir(parents=True, exist_ok=True)
@@ -116,13 +122,6 @@ mptsv_path = Path.joinpath(Path(__file__).resolve().parent, "mpcat40.tsv")
 category_dict = pd.read_csv(mptsv_path, sep='\t')
 category_dict['color'] = category_dict.apply(lambda row: np.array(ImageColor.getrgb(row['hex'])), axis=1)
 obj_category_num = 42
-
-# # human gender of sequences
-# gender_labels = open(Path.joinpath(project_folder, "data", 'gender.txt'), 'r').readlines()
-# gender_dict = {}
-# for line in gender_labels:
-#     sequence, gender = line[:-1].split(' ')
-#     gender_dict[sequence] = gender
 
 # human body param
 num_pca_comps = 6

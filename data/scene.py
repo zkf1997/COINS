@@ -18,9 +18,17 @@ from scipy.spatial import KDTree
 import numpy as np
 import torch.nn.functional as F
 import open3d as o3d
-from sklearn.decomposition import PCA
+from data.scene_registration import prox_to_posa
 
 DEBUG = False
+
+def sample_box(bbox, mesh_grid_step=0.2, z_min=-0.5, z_max=2.3):
+    X, Y, Z = np.meshgrid(np.arange(bbox[0], bbox[2], mesh_grid_step),
+                          np.arange(bbox[1], bbox[3], mesh_grid_step),
+                          np.arange(z_min, z_max, mesh_grid_step),
+                          )
+    points = np.stack([X.flatten(), Y.flatten(), Z.flatten()], axis=1).astype(np.float32)
+    return points
 
 def to_trimesh(o3d_mesh):
     """
@@ -204,6 +212,16 @@ class Scene:
                 pickle.dump(self.serialize(), f)
 
         self.mesh_with_accessory = {}
+        # build kdtree, used by pigraph
+        points = np.zeros((0, 3))
+        self.vertex_number_list = []  # vertex number of each object, used to query which object a point belong to
+        for obj_node in self.object_nodes:
+            self.vertex_number_list.append(np.asarray(obj_node.mesh.vertices).shape[0])
+            points = np.concatenate((points, np.asarray(obj_node.mesh.vertices)), axis=0)
+        self.vertex_number_list = np.asarray(self.vertex_number_list)
+        self.vertex_number_sum = np.cumsum(self.vertex_number_list)
+        self.pointcloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+        self.kdtree = o3d.geometry.KDTreeFlann(self.pointcloud)  # kdtree of all object instances
 
         # load sdf
         # https: // github.com / mohamedhassanmus / POSA / blob / de21b40f22316cfb02ec43021dc5f325547c41ca / src / data_utils.py  # L99
@@ -217,6 +235,12 @@ class Scene:
         sdf = sdf.reshape((grid_dim, grid_dim, grid_dim, 1))
         self.sdf = sdf
         self.sdf_config = {'grid_min': grid_min, 'grid_max': grid_max, 'grid_dim': grid_dim}
+
+    def vertex_id_to_obj_id(self, vertex_id):
+        """
+        Query the object ID using vertex ID.
+        """
+        return np.searchsorted(self.vertex_number_sum, vertex_id)
 
     def serialize(self):
         serialized = copy.deepcopy(self.__dict__)
@@ -337,7 +361,6 @@ class Scene:
         if node_idx in self.mesh_with_accessory:
             return self.mesh_with_accessory[node_idx]
 
-        # obj = [obj for obj in self.object_nodes if obj.id == node_idx][0]  # for scannet, index in the list can be different from instance index because 0 is skipped
         obj = self.object_nodes[node_idx]
         mesh = to_trimesh(obj.mesh)
         if obj.category_name in ['sofa', 'bed', 'table', 'cabinet', 'chest_of_drawers']:
@@ -396,6 +419,44 @@ class Scene:
                     candidate_combination = updated_combination
         return verbs, nouns, candidate_combination
 
+    def translation_sample_for_interaction(self, interaction, object_combination,
+                                           sample_method='posa', num_samples=512, grid_step=0.2):
+        atomic_interactions = interaction.split('+')
+        verbs = [atomic.split('-')[0] for atomic in atomic_interactions]
+        nouns = [atomic.split('-')[1] for atomic in atomic_interactions]
+        candidate_aabb = None
+        for atomic_idx, object_node in enumerate(object_combination):
+            offset = 0.5 if 'touch' == verbs[atomic_idx] else 0
+            aabb = np.array(
+                    [object_node.aabb.min_bound[0] - offset,
+                    object_node.aabb.min_bound[1] - offset,
+                    object_node.aabb.max_bound[0] + offset,
+                    object_node.aabb.max_bound[1] + offset,]
+            )
+            if candidate_aabb is None:
+                candidate_aabb = aabb
+            else:
+                intersection = get_intersection_2d(aabb, candidate_aabb)
+                if (intersection[:2] < intersection[2:]).all():
+                    candidate_aabb = intersection
+                else:  # no intersection
+                    candidate_aabb = np.zeros(4)
+
+        floor_height = self.get_floor_height()
+        z_min = floor_height + 0.7 if 'stand' in verbs else floor_height + 0.4
+        z_max = floor_height + 2.5 if 'stand on-table' in interaction else floor_height + 1.2
+        if sample_method == 'posa':
+            translation_samples = prox_to_posa(self.name, sample_box(candidate_aabb, z_min=z_min, z_max=z_max))
+            return translation_samples
+        else:  # PiGraph
+            soboleng = torch.quasirandom.SobolEngine(dimension=3)
+            min_bound = np.array([candidate_aabb[0], candidate_aabb[1], z_min])
+            max_bound = np.array([candidate_aabb[2], candidate_aabb[3], z_max])
+            extent = max_bound - min_bound
+            translation_samples = soboleng.draw(num_samples).numpy() * extent.reshape(
+                (1, 3)) + min_bound.reshape((1, 3))
+            return  translation_samples
+
     def get_floor_height(self):
         """
         Get the floor height in this scene.
@@ -425,7 +486,6 @@ class Scene:
         sdf_max = torch.tensor(sdf_config['grid_max']).reshape(1, 1, 3).to(vertices.device)
         sdf_min = torch.tensor(sdf_config['grid_min']).reshape(1, 1, 3).to(vertices.device)
 
-        # vertices = torch.tensor(vertices).reshape(1, -1, 3)
         batch_size, num_vertices, _ = vertices.shape
         vertices = ((vertices - sdf_min)
                          / (sdf_max - sdf_min) * 2 - 1)

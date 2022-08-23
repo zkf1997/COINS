@@ -118,12 +118,6 @@ class LitTransformNet(pl.LightningModule):
 
         lr_scheduler = ReduceLROnPlateau(optimizer, patience=5, factor=0.9, verbose=True)
         return ({'optimizer': optimizer,
-                 # 'lr_scheduler': {
-                 #    'scheduler': lr_scheduler,
-                 #    'reduce_on_plateau': True,
-                 #    # val_checkpoint_on is val_loss passed in as checkpoint_on
-                 #    'monitor': 'joint'
-                 #    }
                  })
 
     def calc_loss(self, x, x_hat, q_z, batch=None):

@@ -719,6 +719,143 @@ class CompositeFrameDataset(Dataset):
         }
         return record_data
 
+class InteractionFeatureDataset(Dataset):
+    """Dataset of SMPLX body with POSA contact features. Only used in the baseline POSA-I."""
+    def __init__(self, interaction_data, split='train', obj_code_type='onehot', verb_code_type='onehot', use_augment=True,
+                 num_points=4096, center_type='random', scale_obj=False, normalize=False, used_interaction='all', used_instance=None,
+                 point_sample='random', exclude=None,
+                 skip_composite='no',
+                 single_frame=None, keep_frame=None, data_overwrite=False):
+
+        file_path = Path.joinpath(project_folder, "data", "feature_dataset", split + '_' + used_interaction + '.pkl')
+        # load precomputed data
+        if file_path.exists() and not data_overwrite:
+            with open(file_path, "rb") as pkl_file:
+                cache = pickle.load(pkl_file)
+            data, pointcloud_dict = cache['data'], cache['pointcloud_dict']
+        else:
+            data = []
+            body_model = body_model_dict['neutral']
+            pointcloud_dict = {}
+            for scene in scene_names:
+                pointcloud_dict[scene] = {}
+            statistics = {}
+            for interaction in interaction_names:
+                if used_interaction != 'all' and interaction != used_interaction:
+                    continue
+                records = deepcopy(get_interaction_segments(interaction.split('+'), interaction_data, mode='verb-noun'))
+                print('loading ', interaction, ':', len(records))
+                statistics[interaction] = len(records)
+                if len(records) == 0:
+                    continue
+                smplx_params = [to_smplx_input(record['smplx_param']) for record in records]
+                frame_scene_names = [record['scene_name'] for record in records]
+                smplx_input = {}
+                for key in smplx_param_names:
+                    smplx_input[key] = torch.cat([smplx_param[key] for smplx_param in smplx_params], dim=0)
+                # print('get vertices')
+                body_vertices, pelvis, joints = get_body_by_batch(body_model, smplx_input)
+                vertex_obj_dists = get_vertex_obj_dists(body_vertices, frame_scene_names)
+                # print('vertices got')
+                for idx, record in enumerate(records):
+                    record['interaction'] = interaction
+                    record['body_vertices'] = body_vertices[idx]
+                    record['vertex_obj_dists'] = vertex_obj_dists[idx]
+                    record['pelvis'] = pelvis[idx]
+                    record['joints'] = joints[idx, :55, :]
+                    record['smplx_param'] = {}
+                    # need to copy param, do not do anything related to cuda in getitem which can cause multiprocess related error need manual handle
+                    for key in smplx_param_names:
+                        record['smplx_param'][key] = smplx_params[idx][key].cpu()
+                    scene_name = record['scene_name']
+                    scene = scenes[scene_name]
+
+                    record['node_idx'] = []
+                    record['verb_code'] = np.zeros(num_verb, dtype=np.float32)
+                    record['noun_code'] = np.zeros(num_noun, dtype=np.float32)
+                    record['interaction_code'] = np.zeros(num_noun * num_verb, dtype=np.float32)
+                    for atomic_interaction in interaction.split('+'):
+                        verb, noun = atomic_interaction.split('-')
+                        atomic_idx = record['interaction_labels'].index(atomic_interaction)
+                        node_idx = record['interaction_obj_idx'][atomic_idx]
+                        node_category = scene.object_nodes[node_idx].category
+                        verb_id = action_names.index(verb)
+                        verb_code = np.eye(num_verb, dtype=np.float32)[verb_id]
+                        noun_id = category_dict[category_dict['mpcat40'] == noun].index[0]
+                        noun_code = np.eye(num_noun, dtype=np.float32)[noun_id]
+                        interaction_code = np.kron(verb_code, noun_code)
+                        record['node_idx'].append(str(node_idx))
+                        record['verb_code'] += verb_code
+                        record['noun_code'] += noun_code
+                        record['interaction_code'] += interaction_code
+                    record['node_idx'] = '_'.join(record['node_idx'])
+
+                # some categories have too few records, try to make category more balanced
+                if len(records) < 512:
+                    records = records * (512 // len(records))
+                data += records
+                # break
+            print(statistics)
+            cache = {'data': data,
+                     'pointcloud_dict': pointcloud_dict
+                     }
+            file_path.parent.mkdir(exist_ok=True)
+            with open(file_path, "wb") as pkl_file:
+                pickle.dump(cache, pkl_file)
+
+        if keep_frame is None:
+            self.data = data
+        else:
+            frame_num = len(data)
+            keep_idx = np.random.choice(np.arange(frame_num), keep_frame, replace=False)
+            self.data = []
+            for idx in keep_idx:
+                self.data.append(data[idx])
+
+        if exclude is not None:
+            self.data = [record for record in self.data if record['interaction'] not in exclude]
+            print('used interactions:', set([record['interaction'] for record in self.data]))
+
+        if skip_composite != 'no':
+            self.data = [record for record in self.data if '+' not in record['interaction']]
+            print('used interactions:', set([record['interaction'] for record in self.data]))
+
+        self.pointcloud_dict = pointcloud_dict
+        self.obj_code_type = obj_code_type
+        self.verb_code_type = verb_code_type
+        self.use_augment = use_augment
+        self.num_points = num_points
+        self.center_type = center_type
+        self.normalize = normalize
+        self.single_frame = single_frame
+        self.scale_obj = scale_obj
+        self.point_sample = point_sample
+
+
+
+    def __getitem__(self, idx):
+        # record = self.data[-1]
+        record = self.data[idx] if self.single_frame is None else self.data[self.single_frame]
+        scene = scenes[record['scene_name']]
+        body_vertices = record['body_vertices']
+        pelvis = record['pelvis']
+        joints = record['joints']
+        node_idx = record['node_idx']
+        smplx_param = deepcopy(record['smplx_param'])
+
+        for key in smplx_param_names:
+            smplx_param[key] = smplx_param[key].squeeze()
+        return smplx_param, pelvis, joints, body_vertices - pelvis.reshape((1, 3)), \
+               record['vertex_obj_dists'], record['interaction'], record['verb_code'], record['noun_code'], record[
+                   'interaction_code'], record['scene_name'], record['node_idx']
+                    # obj_points, centroid, scale, rotation, \
+
+    def __len__(self):
+        return len(self.data)
+        # return min(len(self.data), 16)
+
+
+
 if __name__ == "__main__":
     # data
     with open(Path.joinpath(project_folder, "data", 'train.pkl'), 'rb') as data_file:
