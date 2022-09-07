@@ -189,9 +189,7 @@ class Scene:
             # scene mesh and semantic mesh
             scene_path = os.path.join(scene_folder, scene_name + '.ply')
             # semantic annotation of Werkraum is inconsistent with RGB scan
-            scene_semantic_path = os.path.join(scene_folder, scene_name + '_withlabels.ply') if scene_name in ['Werkraum',
-                                                                                                               'MPH1Library'] else os.path.join(
-                scene_folder, scene_name + '_semantic.ply')
+            scene_semantic_path = os.path.join(scene_folder, scene_name + '_withlabels.ply')
             # load with trimesh errors for werkraum
             self.mesh = o3d.io.read_triangle_mesh(scene_path)
             original_mesh = to_trimesh(self.mesh)
