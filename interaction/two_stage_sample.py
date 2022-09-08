@@ -423,8 +423,8 @@ def two_stage_composition_sample(method='direct', mask_type='learned_by_part'):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--transform_checkpoint", type=str, default=(checkpoint_folder / 'pelvis.ckpt'))
-    parser.add_argument("--interaction_checkpoint", type=str, default=(checkpoint_folder / 'body.ckpt'))
+    parser.add_argument("--transform_checkpoint", type=str, default='pelvis.ckpt')
+    parser.add_argument("--interaction_checkpoint", type=str, default='body.ckpt')
     parser.add_argument("--save_dir", type=str, default="two_stage")
     parser.add_argument("--exp_name", type=str, default="test")
     parser.add_argument("--scene_name", type=str, default="test")
@@ -463,8 +463,8 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         print(torch.cuda.get_device_name(0))
 
-    transform_model = LitTransformNet.load_from_checkpoint(args.transform_checkpoint).to(device)
-    interaction_model = LitInteraction.load_from_checkpoint(args.interaction_checkpoint).to(device)
+    transform_model = LitTransformNet.load_from_checkpoint(checkpoint_folder / args.transform_checkpoint).to(device)
+    interaction_model = LitInteraction.load_from_checkpoint(checkpoint_folder / args.interaction_checkpoint).to(device)
     interaction_model.eval()
     transform_model.eval()
     body_model = interaction_model.body_model = smplx.create(smplx_model_folder, model_type='smplx',

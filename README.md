@@ -48,9 +48,10 @@ For synthesizing interactions with semantic control, please run [two_stage_sampl
 ```
 cd interaction
 # sample interactions
-python two_stage_sample.py --exp_name test --lr_posa 0.01 --max_step_body 100  --weight_penetration 20 --weight_pose 10 --weight_init 0.01  --weight_contact_semantic 1 --num_sample 8 --num_try 1  --visualize 1 --full_scene 1 --interaction 'sit on-chair' --scene_name 'MPH16'
-# compositional interaction synthesis
-python two_stage_sample.py --exp_name test --lr_posa 0.01 --max_step_body 100  --weight_penetration 20 --weight_pose 10 --weight_init 0.01  --weight_contact_semantic 1 --num_sample 8 --num_try 1  --visualize 1 --full_scene 1 --interaction 'sit on-chair+touch-table' --scene_name 'MPH16' --composition 1 
+python two_stage_sample.py --exp_name test --lr_posa 0.01 --max_step_body 100  --weight_penetration 100 --weight_pose 10 --weight_init 0.01  --weight_contact_semantic 1 --num_sample 8 --num_try 1  --visualize 1 --full_scene 1 --interaction 'sit on-chair' --scene_name 'MPH16'
+python two_stage_sample.py --exp_name test --lr_posa 0.01 --max_step_body 100  --weight_penetration 100 --weight_pose 10 --weight_init 0.01  --weight_contact_semantic 1 --num_sample 8 --num_try 1  --visualize 1 --full_scene 1 --interaction 'sit on-chair+touch-table' --scene_name 'MPH16'
+# compositional interaction synthesis using models trained only on atomic data
+python two_stage_sample.py --exp_name test --lr_posa 0.01 --max_step_body 100 --weight_penetration 100 --weight_pose 10 --weight_init 0.01 --weight_contact_semantic 1 --num_sample 8 --num_try 1 --visualize 1 --full_scene 1 --interaction 'sit on-chair+touch-table' --scene_name 'MPH16' --composition 1 --transform_checkpoint 'pelvis_atomic.ckpt' --interaction_checkpoint 'body_atomic.ckpt' 
 ```
 The synthesized results can be found in `./results/two_stage`.
 Currently, the script supports choosing PROX scenes by `--scene_name` and interaction by `--interaction` in the format of `action1-object1[+action2-object2]`. The script iterates over all instances of specified category in the input scene and generates interactions for each action-instance pair.

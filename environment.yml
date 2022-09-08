@@ -7,7 +7,7 @@ channels:
 dependencies:
   - python=3.7
   - cudatoolkit=11.3
-  - pytorch::pytorch
+  - pytorch::pytorch=1.11.0
   - pytorch3d::pytorch3d
   - pytorch-lightning
   - torchvision
