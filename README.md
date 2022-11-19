@@ -97,6 +97,12 @@ Please check the instructions in orginal POSA repo and then refer to [synthesize
 The code of POSA-I is currently distributed in [inteaction](./interaction) and [POSA](./POSA), as well as the origial POSA repo. It is currently kind of messy and will potentially be restructured.
 </details>
 
+## Evaluation
+The [evaluation](evaluation/) folder contains the scripts for evaluation.
+* [load_results.py](evaluation/load_results.py) loading interaction results from different methods. 
+* [render_results.py](evaluation/render_results.py) renders interactions in multi-views 
+* [eval_results.py](evaluation/eval_results.py) evaluates the physical plausibility, semantic contact, and diversity metrics of generated results.  
+
 ## License
 We employ MIT license for this repository, with the exceptions of codes borrowed or modified from other works:
 * [mpcat40.tsv](./configuration/mpcat40.tsv) from [Matterport](https://github.com/niessner/Matterport/blob/master/metadata/mpcat40.tsv).

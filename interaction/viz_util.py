@@ -9,7 +9,7 @@ import pandas as pd
 import trimesh
 import pyrender
 import PIL.Image as pil_img
-import eulerangles
+from interaction import eulerangles
 
 def create_renderer(H=1080, W=1920, intensity=50, fov=None, point_size=1.0):
     if fov is None:
