@@ -198,7 +198,7 @@ class Scene:
                                                            'MPH1Library'] else original_mesh  # semantic annotation of the two is inconsistent with RGB scan, we can only split the semantic mesh
 
             # load or build instance segmentation
-            instance_segment_path = os.path.join(scene_folder, self.name + '_segment.json')
+            instance_segment_path = os.path.join(scene_cache_folder, self.name + '_segment.json')
             with open(instance_segment_path, 'r') as f:
                 segment_labels = json.load(f)
             vertex_category_ids, vertex_instance_ids = np.array(segment_labels['vertex_category']), np.array(

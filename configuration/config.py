@@ -7,31 +7,32 @@ import platform
 
 local_machine = (platform.node() == 'dalcowks')
 
-proxe_base_folder = Path("/home/kaizhao/projects/COINS/proxe")
-scene_folder = Path.joinpath(proxe_base_folder, "scenes_semantics")
-sdf_folder = Path.joinpath(proxe_base_folder, "sdf")
-cam2world_folder = Path.joinpath(proxe_base_folder, "cam2world")
-# human_folder = Path.joinpath(proxe_base_folder, "PROX_temporal/PROXD_temp_v2")
-# graph_folder = Path.joinpath(proxe_base_folder, "scene_graph")
-scene_cache_folder = Path.joinpath(proxe_base_folder, 'scene_segmentation')
-# downloaded files from POSA: https://posa.is.tue.mpg.de/index.html
-posa_folder = Path.joinpath(proxe_base_folder, 'POSA_dir')
-mesh_ds_folder = Path.joinpath(proxe_base_folder, 'POSA_dir', 'mesh_ds')
-# smplx models
-smplx_model_folder = Path.joinpath(proxe_base_folder, "models_smplx_v1_1/models")
 # project directory
 project_folder = Path(__file__).resolve().parents[1]
+# proxe directories
+proxe_base_folder = project_folder / 'proxe'
+scene_folder = proxe_base_folder / 'scenes_semantics'
+sdf_folder = proxe_base_folder / 'sdf'
+cam2world_folder = proxe_base_folder / 'cam2world'
+# human_folder = proxe_base_folder / 'PROX_temporal/PROXD_temp_v2'
+# graph_folder = proxe_base_folder / 'scene_graph'
+scene_cache_folder = proxe_base_folder / 'scene_segmentation'
+# downloaded files from POSA: https://posa.is.tue.mpg.de/index.html
+posa_folder = proxe_base_folder / 'POSA_dir'
+mesh_ds_folder = posa_folder / 'mesh_ds'
+# smplx models
+smplx_model_folder = proxe_base_folder / 'models_smplx_v1_1/models'
 # mesh upsample and downsample weights
-mesh_operation_file = Path.joinpath(project_folder, "data", 'mesh_operation.npz')
+mesh_operation_file = project_folder / 'data' / 'mesh_operation.npz'
 # tranformation matrix between PROX and POSA scenes
-scene_registration_file = Path.joinpath(project_folder, "data", 'scene_registration.pkl')
+scene_registration_file = project_folder / 'data' / 'scene_registration.pkl'
 # checkpoints
-checkpoint_folder = Path.joinpath(project_folder, 'checkpoints')
+checkpoint_folder = project_folder / 'checkpoints'
 checkpoint_folder.mkdir(parents=True, exist_ok=True)
 # rendering and results
-results_folder = Path.joinpath(Path(__file__).resolve().parents[1], "results")
+results_folder = project_folder / 'results'
 results_folder.mkdir(parents=True, exist_ok=True)
-render_folder = Path.joinpath(Path(__file__).resolve().parents[1], "render")
+render_folder = project_folder / 'renders'
 render_folder.mkdir(parents=True, exist_ok=True)
 
 # scene names
@@ -90,7 +91,7 @@ candidate_combination_dict = {
 }
 
 # sequence names
-recordings_temporal = Path.joinpath(Path(__file__).resolve().parent, "recordings_temporal.txt")
+recordings_temporal = project_folder / 'configuration' / 'recordings_temporal.txt'
 sequence_names = [sequence.split('\n')[0] for sequence in recordings_temporal.open().readlines()]
 
 # interaction names
@@ -106,10 +107,10 @@ atomic_interaction_names_include_motion = ['jump on-sofa', 'step down-table', 't
 'lie on-bed', 'touch-table', 'lie on-seating', 'touch-wall', 'stand on-floor', 'sit on-sofa', 'move leg-bed', 'sit on-table', 'sit on-cabinet', 'restfoot-stool', 'sit down-cabinet', 'stand on-chest_of_drawers', 'sit down-bed']
 atomic_interaction_names_include_motion_train = ['sit on-sofa', 'touch-shelving', 'touch-tv_monitor', 'sit down-sofa', 'jump on-sofa', 'touch-chair', 'step down-chair', 'walk on-floor', 'touch-chest_of_drawers', 'sit down-bed', 'sit on-table', 'move on-sofa', 'stand on-chest_of_drawers', 'turn-floor', 'lie on-sofa', 'stand up-bed', 'lie on-bed', 'step up-sofa', 'side walk-floor', 'sit down-cabinet', 'stand up-chair', 'stand up-cabinet', 'touch-sofa', 'sit on-cabinet', 'a pose-floor', 'move leg-sofa', 'sit on-bed', 'touch-wall', 'sit on-chair', 'step down-table', 'stand up-sofa', 'sit up-sofa', 'touch-table', 'step up-chair', 'stand on-table', 'step down-sofa', 'sit down-chair', 'stand on-floor', 'stand on-bed', 'touch-board_panel', 'lie down-sofa', 'step up-table']
 composed_interaction_names = ['sit on-chair+touch-table', 'sit on-sofa+touch-table',
-                      # 'stand on-floor+touch-lighting', 'stand on-floor+touch-objects',
+                              # 'stand on-floor+touch-lighting', 'stand on-floor+touch-objects',
                               'stand on-floor+touch-board_panel', 'stand on-floor+touch-table',
-                      'stand on-floor+touch-tv_monitor', 'stand on-floor+touch-shelving', 'stand on-floor+touch-wall',
-                      ]
+                              'stand on-floor+touch-tv_monitor', 'stand on-floor+touch-shelving', 'stand on-floor+touch-wall',
+                             ]
 test_composed_interaction_names = [
     'sit on-chair+touch-table',
     'stand on-floor+touch-board_panel', 'stand on-floor+touch-table',
@@ -117,8 +118,8 @@ test_composed_interaction_names = [
 interaction_names = atomic_interaction_names_include_motion_train + composed_interaction_names
 
 # load category name and visualization color
-#mpcat40index	mpcat40	hex	wnsynsetkey	nyu40	skip	labels
-mptsv_path = Path.joinpath(Path(__file__).resolve().parent, "mpcat40.tsv")
+# mpcat40index, mpcat40, hex, wnsynsetkey, nyu40, skip, labels
+mptsv_path = project_folder / 'configuration' / 'mpcat40.tsv'
 category_dict = pd.read_csv(mptsv_path, sep='\t')
 category_dict['color'] = category_dict.apply(lambda row: np.array(ImageColor.getrgb(row['hex'])), axis=1)
 obj_category_num = 42
@@ -133,10 +134,10 @@ used_smplx_param_names = ['transl', 'global_orient', 'body_pose', 'left_hand_pos
 body_parts = ['back', 'gluteus', 'L_Hand', 'R_Hand', 'L_Leg', 'R_Leg', 'thighs']
 body_part_vertices = {}
 for body_part in body_parts:
-    with open(Path.joinpath(proxe_base_folder, 'body_segments', body_part + '.json'), 'r') as file:
+    with open(proxe_base_folder / 'body_segments' / (body_part + '.json'), 'r') as file:
         body_part_vertices[body_part] = json.load(file)['verts_ind']
 #https://github.com/Meshcapade/wiki/blob/main/assets/SMPL_body_segmentation/smplx/smplx_vert_segmentation.json
-with open((project_folder / 'configuration' / 'smplx_vert_segmentation.json'), 'r') as file:
+with open(project_folder / 'configuration' / 'smplx_vert_segmentation.json', 'r') as file:
     body_part_vertices_full = json.load(file)
 upper_body_parts = ["rightHand", "leftArm",
                     "rightArm", "leftHandIndex1", "rightHandIndex1", "leftForeArm",
